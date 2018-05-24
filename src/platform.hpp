@@ -41,8 +41,8 @@
 /* #undef ZMQ_HAVE_OPENPGM */
 /* #undef ZMQ_MAKE_VALGRIND_HAPPY */
 
-#define ZMQ_HAVE_CURVE
-#define ZMQ_USE_TWEETNACL
+/* #undef ZMQ_HAVE_CURVE */
+/* #undef ZMQ_USE_TWEETNACL */
 /* #undef ZMQ_USE_LIBSODIUM */
 /* #undef SODIUM_STATIC */
 

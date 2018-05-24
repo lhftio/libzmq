@@ -148,7 +148,7 @@ test_zmq_poll_fd
 test_reconnect_ivl
 tests/test*.log
 tests/test*.trs
-src/platform.hpp*
+src/platform.hpp.*
 src/stamp-h1
 local_lat
 local_thr
