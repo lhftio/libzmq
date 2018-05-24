@@ -5,10 +5,13 @@ cc_library(
     includes = [
         "src",
     ],
+    strip_include_prefix =
+        "include",
     hdrs = glob([
         "include/*.h",
     ]),
     srcs = glob([
+        "include/*.h",
         "src/**/*.h",
         "src/**/*.hpp",
         "src/**/*.cpp",
