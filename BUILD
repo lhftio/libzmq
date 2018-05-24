@@ -16,7 +16,7 @@ cc_library(
         "src/**/*.hpp",
         "src/**/*.cpp",
     ]),
-    copts = [
-        "-DZMQ_BUILD_DRAFT_API",
+    defines = [
+        "ZMQ_BUILD_DRAFT_API",
     ],
 )
