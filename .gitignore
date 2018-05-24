@@ -1,3 +1,8 @@
+# Lighthouse
+.bazelrc
+bazel-*
+
+# ZeroMQ
 syntax: glob # for hg-git users
 /Makefile
 builds/Makefile
