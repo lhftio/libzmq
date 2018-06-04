@@ -43,9 +43,10 @@ AC_SUBST(PACKAGE_VERSION)
 # ZeroMQ version 4.2.3: 6:3:1 (ABI version 5)
 # ZeroMQ version 4.2.4: 6:4:1 (ABI version 5)
 # ZeroMQ version 4.2.5: 6:5:1 (ABI version 5)
+# ZeroMQ version 4.3.1: 6:6:1 (ABI version 5)
 #
 # libzmq -version-info current:revision:age
-LTVER="6:5:1"
+LTVER="6:6:1"
 AC_SUBST(LTVER)
 
 # Take a copy of original flags
@@ -173,11 +174,6 @@ case "${host_os}" in
         fi
         AC_DEFINE(ZMQ_HAVE_LINUX, 1, [Have Linux OS])
         libzmq_on_linux="yes"
-
-        # dladdr/dlopen is in libdl on glibc
-        AC_SEARCH_LIBS([dladdr], [dl dld], [], [
-          AC_MSG_ERROR([unable to find the dladdr() function])
-        ])
 
         if test "x$libzmq_tipc_support" = "xyes"; then
             AC_DEFINE(ZMQ_HAVE_TIPC, 1, [Have TIPC support])
@@ -783,7 +779,7 @@ if test "x$enable_libunwind" != "xno"; then
             AC_DEFINE(HAVE_LIBUNWIND, 1, [The libunwind library is to be used])
             AC_SUBST([LIBUNWIND_CFLAGS])
             AC_SUBST([LIBUNWIND_LIBS])
-            AC_CHECK_LIB([dl], [dladdr])
+            AC_SEARCH_LIBS([dladdr], [dl dld])
         ],
         [
             if test "x$enable_libunwind" = "xyes"; then
