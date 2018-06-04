@@ -7,6 +7,23 @@ list (INSERT CMAKE_MODULE_PATH 0 "${CMAKE_CURRENT_SOURCE_DIR}")
 set (ZMQ_CMAKE_MODULES_DIR ${CMAKE_CURRENT_SOURCE_DIR}/builds/cmake/Modules)
 list (APPEND CMAKE_MODULE_PATH ${ZMQ_CMAKE_MODULES_DIR})
 
+# Apply CMP0042: MACOSX_RPATH is enabled by default
+cmake_policy (SET CMP0042 NEW)
+
+include(GNUInstallDirs)
+if (${CMAKE_SYSTEM_NAME} STREQUAL Darwin)
+  # Find more information: https://cmake.org/Wiki/CMake_RPATH_handling
+
+  # Add an install rpath if it is not a system directory
+  list (FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}" isSystemDir)
+  if ("${isSystemDir}" STREQUAL "-1")
+    set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
+  endif ()
+
+  # Add linker search paths pointing to external dependencies
+  set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+endif ()
+
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-std=gnu++11" COMPILER_SUPPORTS_CXX11)
 if(COMPILER_SUPPORTS_CXX11)
@@ -477,6 +494,10 @@ endif ()
 if (MSVC)
   # Parallel make.
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
+  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP")
+
+  # Compile the static lib with debug information included
+  string (REGEX REPLACE "/Z." "/Z7" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 
   # Optimization flags.
   # http://msdn.microsoft.com/en-us/magazine/cc301698.aspx
@@ -582,6 +603,7 @@ set (cxx-sources
         udp_address.cpp
         scatter.cpp
         gather.cpp
+	ip_resolver.cpp
 		zap_client.cpp
 		# at least for VS, the header files must also be listed
 		address.hpp
@@ -890,6 +912,8 @@ if (MSVC)
   # Suppress linker warnings caused by #ifdef omission
   # of file content.
   set( CMAKE_STATIC_LINKER_FLAGS /ignore:4221 )
+  set (PDB_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin")
+  set (PDB_NAME "libzmq${MSVC_TOOLSET}-mt-gd-${ZMQ_VERSION_MAJOR}_${ZMQ_VERSION_MINOR}_${ZMQ_VERSION_PATCH}")
   if (BUILD_SHARED)
     add_library (libzmq SHARED ${sources} ${public_headers} ${html-docs} ${readme-docs} ${CMAKE_CURRENT_BINARY_DIR}/NSIS.template.in ${CMAKE_CURRENT_BINARY_DIR}/version.rc)
     set_target_properties (libzmq PROPERTIES
@@ -938,7 +962,7 @@ else ()
     set_target_properties (libzmq PROPERTIES
                           COMPILE_DEFINITIONS "DLL_EXPORT"
                           PUBLIC_HEADER "${public_headers}"
-                          VERSION "5.1.5"
+                          VERSION "5.1.6"
                           SOVERSION "5"
                           OUTPUT_NAME "zmq"
                           PREFIX "lib")
@@ -988,7 +1012,7 @@ endforeach()
 
 if (BUILD_SHARED)
   target_link_libraries (libzmq ${OPTIONAL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
-  
+
   if (SODIUM_FOUND)
     target_link_libraries (libzmq ${SODIUM_LIBRARIES})
 	# On Solaris, libsodium depends on libssp
@@ -996,7 +1020,7 @@ if (BUILD_SHARED)
       target_link_libraries (libzmq ssp)
     endif ()
   endif ()
-  
+
   if (HAVE_WS2_32)
     target_link_libraries (libzmq ws2_32)
   elseif (HAVE_WS2)
@@ -1018,7 +1042,7 @@ endif ()
 
 if (BUILD_STATIC)
   target_link_libraries (libzmq-static ${OPTIONAL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
-  
+
   if (SODIUM_FOUND)
     target_link_libraries (libzmq-static ${SODIUM_LIBRARIES})
     # On Solaris, libsodium depends on libssp
@@ -1026,7 +1050,7 @@ if (BUILD_STATIC)
       target_link_libraries (libzmq-static ssp)
     endif ()
   endif ()
-  
+
   if (HAVE_WS2_32)
     target_link_libraries (libzmq-static ws2_32)
   elseif (HAVE_WS2)
@@ -1105,8 +1129,6 @@ endif ()
 #-----------------------------------------------------------------------------
 # installer
 
-include(GNUInstallDirs)
-
 if (MSVC)
   install (TARGETS ${target_outputs}
           EXPORT ${PROJECT_NAME}-targets
@@ -1115,17 +1137,12 @@ if (MSVC)
           RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
           PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
           COMPONENT SDK)
-  if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    install (TARGETS ${target_outputs}
-            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-            COMPONENT SDK)
-    if (NOT CMAKE_PDB_OUTPUT_DIRECTORY AND BUILD_SHARED)
-      install (FILES ${CMAKE_CURRENT_BINARY_DIR}/bin/libzmq${MSVC_TOOLSET}-mt-gd-${ZMQ_VERSION_MAJOR}_${ZMQ_VERSION_MINOR}_${ZMQ_VERSION_PATCH}.pdb DESTINATION lib
-            COMPONENT SDK)
-    endif ()
-  elseif (BUILD_SHARED)
+  if (MSVC_IDE)
+    install (FILES ${PDB_OUTPUT_DIRECTORY}/\${CMAKE_INSTALL_CONFIG_NAME}/${PDB_NAME}.pdb DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT SDK OPTIONAL)
+  else()
+    install (FILES ${PDB_OUTPUT_DIRECTORY}/${PDB_NAME}.pdb DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT SDK OPTIONAL)
+  endif()
+  if (BUILD_SHARED)
     install (TARGETS libzmq
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
             PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}

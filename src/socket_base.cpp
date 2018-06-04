@@ -102,6 +102,11 @@ bool zmq::socket_base_t::check_tag ()
     return tag == 0xbaddecaf;
 }
 
+bool zmq::socket_base_t::is_thread_safe () const
+{
+    return thread_safe;
+}
+
 zmq::socket_base_t *zmq::socket_base_t::create (int type_,
                                                 class ctx_t *parent_,
                                                 uint32_t tid_,
@@ -529,7 +534,8 @@ int zmq::socket_base_t::bind (const char *addr_)
 
         paddr->resolved.udp_addr = new (std::nothrow) udp_address_t ();
         alloc_assert (paddr->resolved.udp_addr);
-        rc = paddr->resolved.udp_addr->resolve (address.c_str (), true);
+        rc = paddr->resolved.udp_addr->resolve (address.c_str (), true,
+                                                options.ipv6);
         if (rc != 0) {
             LIBZMQ_DELETE (paddr);
             return -1;
@@ -871,7 +877,8 @@ int zmq::socket_base_t::connect (const char *addr_)
 
         paddr->resolved.udp_addr = new (std::nothrow) udp_address_t ();
         alloc_assert (paddr->resolved.udp_addr);
-        rc = paddr->resolved.udp_addr->resolve (address.c_str (), false);
+        rc = paddr->resolved.udp_addr->resolve (address.c_str (), false,
+                                                options.ipv6);
         if (rc != 0) {
             LIBZMQ_DELETE (paddr);
             return -1;
