@@ -123,6 +123,7 @@ void zmq::udp_engine_t::plug (io_thread_t *io_thread_, session_base_t *session_)
             if (out->is_multicast ()) {
                 int level;
                 int optname;
+                int rc;
 
                 if (out->family () == AF_INET6) {
                     level = IPPROTO_IPV6;
@@ -133,8 +134,16 @@ void zmq::udp_engine_t::plug (io_thread_t *io_thread_, session_base_t *session_)
                 }
 
                 int loop = options.multicast_loop;
-                int rc = setsockopt (fd, level, optname, (char *) &loop,
-                                     sizeof (loop));
+                rc = setsockopt (fd, level, optname, (char *) &loop, sizeof (loop));
+
+#ifdef ZMQ_HAVE_WINDOWS
+                wsa_assert (rc != SOCKET_ERROR);
+#else
+                errno_assert (rc == 0);
+#endif
+
+                int hops = options.multicast_hops;
+                rc = setsockopt (fd, IPPROTO_IP, IP_MULTICAST_TTL, &hops, sizeof (hops));
 
 #ifdef ZMQ_HAVE_WINDOWS
                 wsa_assert (rc != SOCKET_ERROR);
