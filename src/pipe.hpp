@@ -30,17 +30,17 @@
 #ifndef __ZMQ_PIPE_HPP_INCLUDED__
 #define __ZMQ_PIPE_HPP_INCLUDED__
 
-#include "msg.hpp"
 #include "ypipe_base.hpp"
 #include "config.hpp"
 #include "object.hpp"
 #include "stdint.hpp"
 #include "array.hpp"
 #include "blob.hpp"
+#include "options.hpp"
 
 namespace zmq
 {
-class object_t;
+class msg_t;
 class pipe_t;
 
 //  Create a pipepair for bi-directional transfer of messages.
@@ -86,14 +86,12 @@ class pipe_t : public object_t,
     void set_event_sink (i_pipe_events *sink_);
 
     //  Pipe endpoint can store an routing ID to be used by its clients.
-    void set_server_socket_routing_id (uint32_t routing_id_);
-    uint32_t get_server_socket_routing_id ();
+    void set_server_socket_routing_id (uint32_t server_socket_routing_id_);
+    uint32_t get_server_socket_routing_id () const;
 
     //  Pipe endpoint can store an opaque ID to be used by its clients.
-    void set_router_socket_routing_id (const blob_t &identity_);
-    const blob_t &get_routing_id ();
-
-    const blob_t &get_credential () const;
+    void set_router_socket_routing_id (const blob_t &router_socket_routing_id_);
+    const blob_t &get_routing_id () const;
 
     //  Returns true if there is at least one message to read in the pipe.
     bool check_read ();
@@ -112,7 +110,7 @@ class pipe_t : public object_t,
     bool write (msg_t *msg_);
 
     //  Remove unfinished parts of the outbound message from the pipe.
-    void rollback ();
+    void rollback () const;
 
     //  Flush the messages downstream.
     void flush ();
@@ -169,42 +167,42 @@ class pipe_t : public object_t,
 
     //  Pipepair uses this function to let us know about
     //  the peer pipe object.
-    void set_peer (pipe_t *pipe_);
+    void set_peer (pipe_t *peer_);
 
     //  Destructor is private. Pipe objects destroy themselves.
     ~pipe_t ();
 
     //  Underlying pipes for both directions.
-    upipe_t *inpipe;
-    upipe_t *outpipe;
+    upipe_t *_in_pipe;
+    upipe_t *_out_pipe;
 
     //  Can the pipe be read from / written to?
-    bool in_active;
-    bool out_active;
+    bool _in_active;
+    bool _out_active;
 
     //  High watermark for the outbound pipe.
-    int hwm;
+    int _hwm;
 
     //  Low watermark for the inbound pipe.
-    int lwm;
+    int _lwm;
 
     // boosts for high and low watermarks, used with inproc sockets so hwm are sum of send and recv hmws on each side of pipe
-    int inhwmboost;
-    int outhwmboost;
+    int _in_hwm_boost;
+    int _out_hwm_boost;
 
     //  Number of messages read and written so far.
-    uint64_t msgs_read;
-    uint64_t msgs_written;
+    uint64_t _msgs_read;
+    uint64_t _msgs_written;
 
     //  Last received peer's msgs_read. The actual number in the peer
     //  can be higher at the moment.
-    uint64_t peers_msgs_read;
+    uint64_t _peers_msgs_read;
 
     //  The pipe object on the other side of the pipepair.
-    pipe_t *peer;
+    pipe_t *_peer;
 
     //  Sink to send events to.
-    i_pipe_events *sink;
+    i_pipe_events *_sink;
 
     //  States of the pipe endpoint:
     //  active: common state before any termination begins,
@@ -225,21 +223,18 @@ class pipe_t : public object_t,
         term_ack_sent,
         term_req_sent1,
         term_req_sent2
-    } state;
+    } _state;
 
     //  If true, we receive all the pending inbound messages before
     //  terminating. If false, we terminate immediately when the peer
     //  asks us to.
-    bool delay;
+    bool _delay;
 
     //  Routing id of the writer. Used uniquely by the reader side.
-    blob_t router_socket_routing_id;
+    blob_t _router_socket_routing_id;
 
     //  Routing id of the writer. Used uniquely by the reader side.
-    int server_socket_routing_id;
-
-    //  Pipe's credential.
-    blob_t credential;
+    int _server_socket_routing_id;
 
     //  Returns true if the message is delimiter; false otherwise.
     static bool is_delimiter (const msg_t &msg_);
@@ -247,12 +242,14 @@ class pipe_t : public object_t,
     //  Computes appropriate low watermark from the given high watermark.
     static int compute_lwm (int hwm_);
 
-    const bool conflate;
+    const bool _conflate;
 
     //  Disable copying.
     pipe_t (const pipe_t &);
     const pipe_t &operator= (const pipe_t &);
 };
+
+void send_routing_id (pipe_t *pipe_, const options_t &options_);
 }
 
 #endif

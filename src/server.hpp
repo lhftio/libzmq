@@ -36,23 +36,25 @@
 #include "session_base.hpp"
 #include "stdint.hpp"
 #include "blob.hpp"
-#include "msg.hpp"
 #include "fq.hpp"
 
 namespace zmq
 {
 class ctx_t;
+class msg_t;
 class pipe_t;
 
 //  TODO: This class uses O(n) scheduling. Rewrite it to use O(1) algorithm.
 class server_t : public socket_base_t
 {
   public:
-    server_t (zmq::ctx_t *parent_, uint32_t tid_, int sid);
+    server_t (zmq::ctx_t *parent_, uint32_t tid_, int sid_);
     ~server_t ();
 
     //  Overrides of functions from socket_base_t.
-    void xattach_pipe (zmq::pipe_t *pipe_, bool subscribe_to_all_);
+    void xattach_pipe (zmq::pipe_t *pipe_,
+                       bool subscribe_to_all_,
+                       bool locally_initiated_);
     int xsend (zmq::msg_t *msg_);
     int xrecv (zmq::msg_t *msg_);
     bool xhas_in ();
@@ -61,12 +63,9 @@ class server_t : public socket_base_t
     void xwrite_activated (zmq::pipe_t *pipe_);
     void xpipe_terminated (zmq::pipe_t *pipe_);
 
-  protected:
-    const blob_t &get_credential () const;
-
   private:
     //  Fair queueing object for inbound pipes.
-    fq_t fq;
+    fq_t _fq;
 
     struct outpipe_t
     {
@@ -75,12 +74,12 @@ class server_t : public socket_base_t
     };
 
     //  Outbound pipes indexed by the peer IDs.
-    typedef std::map<uint32_t, outpipe_t> outpipes_t;
-    outpipes_t outpipes;
+    typedef std::map<uint32_t, outpipe_t> out_pipes_t;
+    out_pipes_t _out_pipes;
 
     //  Routing IDs are generated. It's a simple increment and wrap-over
     //  algorithm. This value is the next ID to use (if not used already).
-    uint32_t next_routing_id;
+    uint32_t _next_routing_id;
 
     server_t (const server_t &);
     const server_t &operator= (const server_t &);

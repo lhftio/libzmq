@@ -287,8 +287,27 @@ macro(zmq_check_getrandom)
 int main (int argc, char *argv [])
 {
     char buf[4];
-    getrandom(buf, 4, 0);
+    int rc = getrandom(buf, 4, 0);
+    return rc == -1 ? 1 : 0;
 }
 "
     ZMQ_HAVE_GETRANDOM)
+endmacro()
+
+macro(zmq_check_noexcept)
+  message(STATUS "Checking whether noexcept is supported")
+  check_cxx_source_compiles(
+"
+struct X 
+{
+    X(int i) noexcept {}
+};
+
+int main(int argc, char *argv [])
+{
+    X x(5);
+    return 0;
+}
+"
+    ZMQ_HAVE_NOEXCEPT)
 endmacro()

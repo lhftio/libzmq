@@ -57,7 +57,7 @@ class object_t
     virtual ~object_t ();
 
     uint32_t get_tid ();
-    void set_tid (uint32_t id);
+    void set_tid (uint32_t id_);
     ctx_t *get_ctx ();
     void process_command (zmq::command_t &cmd_);
     void send_inproc_connected (zmq::socket_base_t *socket_);
@@ -73,7 +73,7 @@ class object_t
     void unregister_endpoints (zmq::socket_base_t *socket_);
     zmq::endpoint_t find_endpoint (const char *addr_);
     void pend_connection (const std::string &addr_,
-                          const endpoint_t &endpoint,
+                          const endpoint_t &endpoint_,
                           pipe_t **pipes_);
     void connect_pending (const char *addr_, zmq::socket_base_t *bind_socket_);
 
@@ -134,10 +134,10 @@ class object_t
 
   private:
     //  Context provides access to the global state.
-    zmq::ctx_t *const ctx;
+    zmq::ctx_t *const _ctx;
 
     //  Thread ID of the thread the object belongs to.
-    uint32_t tid;
+    uint32_t _tid;
 
     void send_command (command_t &cmd_);
 

@@ -30,7 +30,6 @@
 #ifndef __ZMQ_RAW_DECODER_HPP_INCLUDED__
 #define __ZMQ_RAW_DECODER_HPP_INCLUDED__
 
-#include "err.hpp"
 #include "msg.hpp"
 #include "i_decoder.hpp"
 #include "stdint.hpp"
@@ -51,16 +50,16 @@ class raw_decoder_t : public i_decoder
     virtual void get_buffer (unsigned char **data_, size_t *size_);
 
     virtual int
-    decode (const unsigned char *data_, size_t size_, size_t &processed);
+    decode (const unsigned char *data_, size_t size_, size_t &bytes_used_);
 
-    virtual msg_t *msg () { return &in_progress; }
+    virtual msg_t *msg () { return &_in_progress; }
 
     virtual void resize_buffer (size_t) {}
 
   private:
-    msg_t in_progress;
+    msg_t _in_progress;
 
-    shared_message_memory_allocator allocator;
+    shared_message_memory_allocator _allocator;
 
     raw_decoder_t (const raw_decoder_t &);
     void operator= (const raw_decoder_t &);

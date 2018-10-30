@@ -207,6 +207,12 @@ case "${host_os}" in
         ;;
     *freebsd*)
         # Define on FreeBSD to enable all library features
+        case "${host_os}" in
+            # On Debian/kFreeBSD with gnu set the --version-script flag
+            kfreebsd*-gnu*)
+                libzmq_on_gnu="yes"
+            ;;
+        esac
         CPPFLAGS="-D__BSD_VISIBLE $CPPFLAGS"
         AC_DEFINE(ZMQ_HAVE_FREEBSD, 1, [Have FreeBSD OS])
         ;;
@@ -314,6 +320,12 @@ case "${host_os}" in
         AC_MSG_ERROR([unsupported system: ${host_os}.])
         ;;
 esac
+
+# Sun Studio does not like anonymous structures in unions
+if test "x$libzmq_cv_[]_AC_LANG_ABBREV[]_sun_studio_compiler" = "xyes"; then
+    CXXFLAGS="${CXXFLAGS} -features=extensions"
+    CFLAGS="${CFLAGS} -features=extensions"
+fi
 
 # Checks for libraries
 AC_CHECK_LIB([pthread], [pthread_create])
@@ -500,6 +512,8 @@ AM_CONDITIONAL(ENABLE_CURVE_KEYGEN, test "x$enable_curve" = "xyes" -a "x$zmq_ena
 AM_CONDITIONAL(USE_LIBSODIUM, test "$curve_library" = "libsodium")
 AM_CONDITIONAL(USE_TWEETNACL, test "$curve_library" = "tweetnacl")
 AM_CONDITIONAL(HAVE_CURVE, test "x$curve_library" != "x")
+
+AM_CONDITIONAL(USE_WEPOLL, test "$poller" = "wepoll")
 
 # build using pgm
 have_pgm_library="no"
@@ -806,6 +820,18 @@ AM_CONDITIONAL([WITH_CLANG_FORMAT], [$WITH_CLANG_FORMAT])
 # unittests will not build without the static libzmq.a
 AM_CONDITIONAL(ENABLE_STATIC, test "x$enable_static" = "xyes")
 
+# clang 6 has a warning that does not make sense on multi-platform code
+AC_LANG_PUSH([C])
+AX_CHECK_COMPILE_FLAG([-Wno-tautological-constant-compare],
+    [CFLAGS+=" -Wno-tautological-constant-compare"],
+    [],
+    [-Werror])
+AC_LANG_POP([C])
+AX_CHECK_COMPILE_FLAG([-Wno-tautological-constant-compare],
+    [CXXFLAGS+=" -Wno-tautological-constant-compare"],
+    [],
+    [-Werror])
+
 # Subst LIBZMQ_EXTRA_CFLAGS & CXXFLAGS & LDFLAGS
 AC_SUBST(LIBZMQ_EXTRA_CFLAGS)
 AC_SUBST(LIBZMQ_EXTRA_CXXFLAGS)
@@ -829,6 +855,6 @@ AC_CONFIG_FILES([ \
     src/libzmq.pc \
     doc/Makefile \
     builds/Makefile \
-    builds/msvc/Makefile])
+    builds/deprecated-msvc/Makefile])
 
 AC_OUTPUT

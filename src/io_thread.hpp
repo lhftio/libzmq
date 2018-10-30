@@ -30,8 +30,6 @@
 #ifndef __ZMQ_IO_THREAD_HPP_INCLUDED__
 #define __ZMQ_IO_THREAD_HPP_INCLUDED__
 
-#include <vector>
-
 #include "stdint.hpp"
 #include "object.hpp"
 #include "poller.hpp"
@@ -79,13 +77,13 @@ class io_thread_t : public object_t, public i_poll_events
 
   private:
     //  I/O thread accesses incoming commands via this mailbox.
-    mailbox_t mailbox;
+    mailbox_t _mailbox;
 
     //  Handle associated with mailbox' file descriptor.
-    poller_t::handle_t mailbox_handle;
+    poller_t::handle_t _mailbox_handle;
 
     //  I/O multiplexing is performed using a poller object.
-    poller_t *poller;
+    poller_t *_poller;
 
     io_thread_t (const io_thread_t &);
     const io_thread_t &operator= (const io_thread_t &);

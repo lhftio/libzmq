@@ -29,6 +29,8 @@
 
 #include "precompiled.hpp"
 #include <string.h>
+#include <limits.h>
+#include <set>
 
 #include "options.hpp"
 #include "err.hpp"
@@ -75,7 +77,8 @@ int zmq::do_getsockopt (void *const optval_,
     }
     memcpy (optval_, value_, value_len_);
     // TODO why is the remaining memory null-ed?
-    memset ((char *) optval_ + value_len_, 0, *optvallen_ - value_len_);
+    memset (static_cast<char *> (optval_) + value_len_, 0,
+            *optvallen_ - value_len_);
     *optvallen_ = value_len_;
     return 0;
 }
@@ -88,8 +91,10 @@ static int do_getsockopt_curve_key (void *const optval_,
     if (*optvallen_ == CURVE_KEYSIZE) {
         memcpy (optval_, curve_key_, CURVE_KEYSIZE);
         return 0;
-    } else if (*optvallen_ == CURVE_KEYSIZE_Z85 + 1) {
-        zmq_z85_encode ((char *) optval_, curve_key_, CURVE_KEYSIZE);
+    }
+    if (*optvallen_ == CURVE_KEYSIZE_Z85 + 1) {
+        zmq_z85_encode (static_cast<char *> (optval_), curve_key_,
+                        CURVE_KEYSIZE);
         return 0;
     }
     return sockopt_invalid ();
@@ -147,8 +152,9 @@ do_setsockopt_string_allow_empty_strict (const void *const optval_,
     if (optval_ == NULL && optvallen_ == 0) {
         out_value_->clear ();
         return 0;
-    } else if (optval_ != NULL && optvallen_ > 0 && optvallen_ <= max_len_) {
-        out_value_->assign ((const char *) optval_, optvallen_);
+    }
+    if (optval_ != NULL && optvallen_ > 0 && optvallen_ <= max_len_) {
+        out_value_->assign (static_cast<const char *> (optval_), optvallen_);
         return 0;
     }
     return sockopt_invalid ();
@@ -163,7 +169,7 @@ do_setsockopt_string_allow_empty_relaxed (const void *const optval_,
     // TODO use either do_setsockopt_string_allow_empty_relaxed or
     // do_setsockopt_string_allow_empty_strict everywhere
     if (optvallen_ > 0 && optvallen_ <= max_len_) {
-        out_value_->assign ((const char *) optval_, optvallen_);
+        out_value_->assign (static_cast<const char *> (optval_), optvallen_);
         return 0;
     }
     return sockopt_invalid ();
@@ -177,16 +183,20 @@ int do_setsockopt_set (const void *const optval_,
     if (optvallen_ == 0 && optval_ == NULL) {
         set_->clear ();
         return 0;
-    } else if (optvallen_ == sizeof (T) && optval_ != NULL) {
-        set_->insert (*((const T *) optval_));
+    }
+    if (optvallen_ == sizeof (T) && optval_ != NULL) {
+        set_->insert (*(static_cast<const T *> (optval_)));
         return 0;
     }
     return sockopt_invalid ();
 }
 
+// TODO why is 1000 a sensible default?
+const int default_hwm = 1000;
+
 zmq::options_t::options_t () :
-    sndhwm (1000),
-    rcvhwm (1000),
+    sndhwm (default_hwm),
+    rcvhwm (default_hwm),
     affinity (0),
     routing_id_size (0),
     rate (100),
@@ -206,7 +216,7 @@ zmq::options_t::options_t () :
     maxmsgsize (-1),
     rcvtimeo (-1),
     sndtimeo (-1),
-    ipv6 (0),
+    ipv6 (false),
     immediate (0),
     filter (false),
     invert_matching (false),
@@ -233,7 +243,8 @@ zmq::options_t::options_t () :
     zap_enforce_domain (false),
     loopback_fastpath (false),
     multicast_loop (true),
-    zero_copy (true)
+    zero_copy (true),
+    router_notify (0)
 {
     memset (curve_public_key, 0, CURVE_KEYSIZE);
     memset (curve_secret_key, 0, CURVE_KEYSIZE);
@@ -246,18 +257,19 @@ zmq::options_t::options_t () :
 #endif
 }
 
-int zmq::options_t::set_curve_key (uint8_t *destination,
+int zmq::options_t::set_curve_key (uint8_t *destination_,
                                    const void *optval_,
                                    size_t optvallen_)
 {
     switch (optvallen_) {
         case CURVE_KEYSIZE:
-            memcpy (destination, optval_, optvallen_);
+            memcpy (destination_, optval_, optvallen_);
             mechanism = ZMQ_CURVE;
             return 0;
 
         case CURVE_KEYSIZE_Z85 + 1:
-            if (zmq_z85_decode (destination, (char *) optval_)) {
+            if (zmq_z85_decode (destination_,
+                                reinterpret_cast<const char *> (optval_))) {
                 mechanism = ZMQ_CURVE;
                 return 0;
             }
@@ -265,9 +277,10 @@ int zmq::options_t::set_curve_key (uint8_t *destination,
 
         case CURVE_KEYSIZE_Z85:
             char z85_key[CURVE_KEYSIZE_Z85 + 1];
-            memcpy (z85_key, (char *) optval_, optvallen_);
+            memcpy (z85_key, reinterpret_cast<const char *> (optval_),
+                    optvallen_);
             z85_key[CURVE_KEYSIZE_Z85] = 0;
-            if (zmq_z85_decode (destination, z85_key)) {
+            if (zmq_z85_decode (destination_, z85_key)) {
                 mechanism = ZMQ_CURVE;
                 return 0;
             }
@@ -278,6 +291,8 @@ int zmq::options_t::set_curve_key (uint8_t *destination,
     }
     return -1;
 }
+
+const int deciseconds_per_millisecond = 100;
 
 int zmq::options_t::setsockopt (int option_,
                                 const void *optval_,
@@ -311,8 +326,8 @@ int zmq::options_t::setsockopt (int option_,
 
         case ZMQ_ROUTING_ID:
             //  Routing id is any binary string from 1 to 255 octets
-            if (optvallen_ > 0 && optvallen_ < 256) {
-                routing_id_size = (unsigned char) optvallen_;
+            if (optvallen_ > 0 && optvallen_ <= UCHAR_MAX) {
+                routing_id_size = static_cast<unsigned char> (optvallen_);
                 memcpy (routing_id, optval_, routing_id_size);
                 return 0;
             }
@@ -484,7 +499,7 @@ int zmq::options_t::setsockopt (int option_,
         case ZMQ_TCP_ACCEPT_FILTER: {
             std::string filter_str;
             int rc = do_setsockopt_string_allow_empty_strict (
-              optval_, optvallen_, &filter_str, 255);
+              optval_, optvallen_, &filter_str, UCHAR_MAX);
             if (rc == 0) {
                 if (filter_str.empty ()) {
                     tcp_accept_filters.clear ();
@@ -528,8 +543,10 @@ int zmq::options_t::setsockopt (int option_,
             if (optvallen_ == 0 && optval_ == NULL) {
                 mechanism = ZMQ_NULL;
                 return 0;
-            } else if (optvallen_ > 0 && optvallen_ < 256 && optval_ != NULL) {
-                plain_username.assign ((const char *) optval_, optvallen_);
+            } else if (optvallen_ > 0 && optvallen_ <= UCHAR_MAX
+                       && optval_ != NULL) {
+                plain_username.assign (static_cast<const char *> (optval_),
+                                       optvallen_);
                 as_server = 0;
                 mechanism = ZMQ_PLAIN;
                 return 0;
@@ -540,8 +557,10 @@ int zmq::options_t::setsockopt (int option_,
             if (optvallen_ == 0 && optval_ == NULL) {
                 mechanism = ZMQ_NULL;
                 return 0;
-            } else if (optvallen_ > 0 && optvallen_ < 256 && optval_ != NULL) {
-                plain_password.assign ((const char *) optval_, optvallen_);
+            } else if (optvallen_ > 0 && optvallen_ <= UCHAR_MAX
+                       && optval_ != NULL) {
+                plain_password.assign (static_cast<const char *> (optval_),
+                                       optvallen_);
                 as_server = 0;
                 mechanism = ZMQ_PLAIN;
                 return 0;
@@ -550,7 +569,7 @@ int zmq::options_t::setsockopt (int option_,
 
         case ZMQ_ZAP_DOMAIN:
             return do_setsockopt_string_allow_empty_relaxed (
-              optval_, optvallen_, &zap_domain, 255);
+              optval_, optvallen_, &zap_domain, UCHAR_MAX);
             break;
 
             //  If curve encryption isn't built, these options provoke EINVAL
@@ -598,7 +617,7 @@ int zmq::options_t::setsockopt (int option_,
             break;
 
         case ZMQ_GSSAPI_PRINCIPAL:
-            if (optvallen_ > 0 && optvallen_ < 256 && optval_ != NULL) {
+            if (optvallen_ > 0 && optvallen_ <= UCHAR_MAX && optval_ != NULL) {
                 gss_principal.assign ((const char *) optval_, optvallen_);
                 mechanism = ZMQ_GSSAPI;
                 return 0;
@@ -606,7 +625,7 @@ int zmq::options_t::setsockopt (int option_,
             break;
 
         case ZMQ_GSSAPI_SERVICE_PRINCIPAL:
-            if (optvallen_ > 0 && optvallen_ < 256 && optval_ != NULL) {
+            if (optvallen_ > 0 && optvallen_ <= UCHAR_MAX && optval_ != NULL) {
                 gss_service_principal.assign ((const char *) optval_,
                                               optvallen_);
                 mechanism = ZMQ_GSSAPI;
@@ -660,9 +679,9 @@ int zmq::options_t::setsockopt (int option_,
 
         case ZMQ_HEARTBEAT_TTL:
             // Convert this to deciseconds from milliseconds
-            value = value / 100;
-            if (is_int && value >= 0 && value <= 6553) {
-                heartbeat_ttl = (uint16_t) value;
+            value = value / deciseconds_per_millisecond;
+            if (is_int && value >= 0 && value <= UINT16_MAX) {
+                heartbeat_ttl = static_cast<uint16_t> (value);
                 return 0;
             }
             break;
@@ -709,15 +728,14 @@ int zmq::options_t::setsockopt (int option_,
 
         case ZMQ_METADATA:
             if (optvallen_ > 0 && !is_int) {
-                std::string s ((char *) optval_);
-                size_t pos = 0;
-                std::string key, val, delimiter = ":";
-                pos = s.find (delimiter);
+                const std::string s (static_cast<const char *> (optval_));
+                const size_t pos = s.find (':');
                 if (pos != std::string::npos && pos != 0
                     && pos != s.length () - 1) {
-                    key = s.substr (0, pos);
-                    if (key.compare (0, 2, "X-") == 0 && key.length () < 256) {
-                        val = s.substr (pos + 1, s.length ());
+                    const std::string key = s.substr (0, pos);
+                    if (key.compare (0, 2, "X-") == 0
+                        && key.length () <= UCHAR_MAX) {
+                        std::string val = s.substr (pos + 1, s.length ());
                         app_metadata.insert (
                           std::pair<std::string, std::string> (key, val));
                         return 0;
@@ -726,7 +744,6 @@ int zmq::options_t::setsockopt (int option_,
             }
             errno = EINVAL;
             return -1;
-            break;
 
         case ZMQ_MULTICAST_LOOP:
             return do_setsockopt_int_as_bool_relaxed (optval_, optvallen_,
@@ -763,8 +780,8 @@ int zmq::options_t::getsockopt (int option_,
                                 void *optval_,
                                 size_t *optvallen_) const
 {
-    bool is_int = (*optvallen_ == sizeof (int));
-    int *value = (int *) optval_;
+    const bool is_int = (*optvallen_ == sizeof (int));
+    int *value = static_cast<int *> (optval_);
 #if defined(ZMQ_ACT_MILITANT)
     bool malformed = true; //  Did caller pass a bad option value?
 #endif
@@ -786,7 +803,7 @@ int zmq::options_t::getsockopt (int option_,
 
         case ZMQ_AFFINITY:
             if (*optvallen_ == sizeof (uint64_t)) {
-                *((uint64_t *) optval_) = affinity;
+                *(static_cast<uint64_t *> (optval_)) = affinity;
                 return 0;
             }
             break;
@@ -882,7 +899,7 @@ int zmq::options_t::getsockopt (int option_,
 
         case ZMQ_MAXMSGSIZE:
             if (*optvallen_ == sizeof (int64_t)) {
-                *((int64_t *) optval_) = maxmsgsize;
+                *(static_cast<int64_t *> (optval_)) = maxmsgsize;
                 *optvallen_ = sizeof (int64_t);
                 return 0;
             }
@@ -1133,6 +1150,16 @@ int zmq::options_t::getsockopt (int option_,
             }
             break;
 
+#ifdef ZMQ_BUILD_DRAFT_API
+        case ZMQ_ROUTER_NOTIFY:
+            if (is_int) {
+                *value = router_notify;
+                return 0;
+            }
+            break;
+#endif
+
+
         default:
 #if defined(ZMQ_ACT_MILITANT)
             malformed = false;
@@ -1145,10 +1172,4 @@ int zmq::options_t::getsockopt (int option_,
 #endif
     errno = EINVAL;
     return -1;
-}
-
-bool zmq::options_t::is_valid (int option_) const
-{
-    LIBZMQ_UNUSED (option_);
-    return true;
 }

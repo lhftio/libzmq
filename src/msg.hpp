@@ -39,11 +39,14 @@
 #include "atomic_counter.hpp"
 #include "metadata.hpp"
 
+//  bits 2-5
+#define CMD_TYPE_MASK 0x1c
+
 //  Signature for free function to deallocate the message content.
 //  Note that it has to be declared as "C" so that it is the same as
 //  zmq_free_fn defined in zmq.h.
 extern "C" {
-typedef void(msg_free_fn) (void *data, void *hint);
+typedef void(msg_free_fn) (void *data_, void *hint_);
 }
 
 namespace zmq
@@ -75,6 +78,12 @@ class msg_t
     {
         more = 1,    //  Followed by more parts
         command = 2, //  Command frame (see ZMTP spec)
+        //  Command types, use only bits 2-5 and compare with ==, not bitwise,
+        //  a command can never be of more that one type at the same time
+        ping = 4,
+        pong = 8,
+        subscribe = 12,
+        cancel = 16,
         credential = 32,
         routing_id = 64,
         shared = 128
@@ -83,10 +92,10 @@ class msg_t
     bool check () const;
     int init ();
 
-    int init (void *data,
+    int init (void *data_,
               size_t size_,
               msg_free_fn *ffn_,
-              void *hint,
+              void *hint_,
               content_t *content_ = NULL);
 
     int init_size (size_t size_);
@@ -115,15 +124,32 @@ class msg_t
     bool is_delimiter () const;
     bool is_join () const;
     bool is_leave () const;
+    bool is_ping () const;
+    bool is_pong () const;
+
+    //  These are called on each message received by the session_base class,
+    //  so get them inlined to avoid the overhead of 2 function calls per msg
+    inline bool is_subscribe () const
+    {
+        return (_u.base.flags & CMD_TYPE_MASK) == subscribe;
+    }
+    inline bool is_cancel () const
+    {
+        return (_u.base.flags & CMD_TYPE_MASK) == cancel;
+    }
+
+    size_t command_body_size () const;
+    void *command_body ();
     bool is_vsm () const;
     bool is_cmsg () const;
+    bool is_lmsg () const;
     bool is_zcmsg () const;
     uint32_t get_routing_id ();
     int set_routing_id (uint32_t routing_id_);
     int reset_routing_id ();
     const char *group ();
     int set_group (const char *group_);
-    int set_group (const char *, size_t length);
+    int set_group (const char *, size_t length_);
 
     //  After calling this function you can copy the message in POD-style
     //  refs_ times. No need to call copy.
@@ -143,6 +169,12 @@ class msg_t
     {
         max_vsm_size =
           msg_t_size - (sizeof (metadata_t *) + 3 + 16 + sizeof (uint32_t))
+    };
+    enum
+    {
+        ping_cmd_name_size = 5,   // 4PING
+        cancel_cmd_name_size = 7, // 6CANCEL
+        sub_cmd_name_size = 10    // 9SUBSCRIBE
     };
 
   private:
@@ -249,24 +281,24 @@ class msg_t
             char group[16];
             uint32_t routing_id;
         } delimiter;
-    } u;
+    } _u;
 };
 
-inline int close_and_return (zmq::msg_t *msg, int echo)
+inline int close_and_return (zmq::msg_t *msg_, int echo_)
 {
     // Since we abort on close failure we preserve errno for success case.
     int err = errno;
-    const int rc = msg->close ();
+    const int rc = msg_->close ();
     errno_assert (rc == 0);
     errno = err;
-    return echo;
+    return echo_;
 }
 
-inline int close_and_return (zmq::msg_t msg[], int count, int echo)
+inline int close_and_return (zmq::msg_t msg_[], int count_, int echo_)
 {
-    for (int i = 0; i < count; i++)
-        close_and_return (&msg[i], 0);
-    return echo;
+    for (int i = 0; i < count_; i++)
+        close_and_return (&msg_[i], 0);
+    return echo_;
 }
 }
 

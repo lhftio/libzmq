@@ -38,7 +38,7 @@
 
 zmq::radio_t::radio_t (class ctx_t *parent_, uint32_t tid_, int sid_) :
     socket_base_t (parent_, tid_, sid_, true),
-    lossy (true)
+    _lossy (true)
 {
     options.type = ZMQ_RADIO;
 }
@@ -47,9 +47,12 @@ zmq::radio_t::~radio_t ()
 {
 }
 
-void zmq::radio_t::xattach_pipe (pipe_t *pipe_, bool subscribe_to_all_)
+void zmq::radio_t::xattach_pipe (pipe_t *pipe_,
+                                 bool subscribe_to_all_,
+                                 bool locally_initiated_)
 {
     LIBZMQ_UNUSED (subscribe_to_all_);
+    LIBZMQ_UNUSED (locally_initiated_);
 
     zmq_assert (pipe_);
 
@@ -57,10 +60,10 @@ void zmq::radio_t::xattach_pipe (pipe_t *pipe_, bool subscribe_to_all_)
     //  to receive the delimiter.
     pipe_->set_nodelay ();
 
-    dist.attach (pipe_);
+    _dist.attach (pipe_);
 
     if (subscribe_to_all_)
-        udp_pipes.push_back (pipe_);
+        _udp_pipes.push_back (pipe_);
     //  The pipe is active when attached. Let's read the subscriptions from
     //  it, if any.
     else
@@ -77,16 +80,16 @@ void zmq::radio_t::xread_activated (pipe_t *pipe_)
             std::string group = std::string (msg.group ());
 
             if (msg.is_join ())
-                subscriptions.ZMQ_MAP_INSERT_OR_EMPLACE (ZMQ_MOVE (group),
-                                                         pipe_);
+                _subscriptions.ZMQ_MAP_INSERT_OR_EMPLACE (ZMQ_MOVE (group),
+                                                          pipe_);
             else {
                 std::pair<subscriptions_t::iterator, subscriptions_t::iterator>
-                  range = subscriptions.equal_range (group);
+                  range = _subscriptions.equal_range (group);
 
                 for (subscriptions_t::iterator it = range.first;
                      it != range.second; ++it) {
                     if (it->second == pipe_) {
-                        subscriptions.erase (it);
+                        _subscriptions.erase (it);
                         break;
                     }
                 }
@@ -98,7 +101,7 @@ void zmq::radio_t::xread_activated (pipe_t *pipe_)
 
 void zmq::radio_t::xwrite_activated (pipe_t *pipe_)
 {
-    dist.activated (pipe_);
+    _dist.activated (pipe_);
 }
 int zmq::radio_t::xsetsockopt (int option_,
                                const void *optval_,
@@ -109,7 +112,7 @@ int zmq::radio_t::xsetsockopt (int option_,
         return -1;
     }
     if (option_ == ZMQ_XPUB_NODROP)
-        lossy = (*static_cast<const int *> (optval_) == 0);
+        _lossy = (*static_cast<const int *> (optval_) == 0);
     else {
         errno = EINVAL;
         return -1;
@@ -119,23 +122,29 @@ int zmq::radio_t::xsetsockopt (int option_,
 
 void zmq::radio_t::xpipe_terminated (pipe_t *pipe_)
 {
-    //  NOTE: erase invalidates an iterator, and that's why it's not incrementing in post-loop
-    //  read-after-free caught by Valgrind, see https://github.com/zeromq/libzmq/pull/1771
-    for (subscriptions_t::iterator it = subscriptions.begin ();
-         it != subscriptions.end ();) {
+    for (subscriptions_t::iterator it = _subscriptions.begin (),
+                                   end = _subscriptions.end ();
+         it != end;) {
         if (it->second == pipe_) {
-            subscriptions.erase (it++);
+#if __cplusplus >= 201103L
+            it = _subscriptions.erase (it);
+#else
+            _subscriptions.erase (it++);
+#endif
         } else {
             ++it;
         }
     }
 
-    udp_pipes_t::iterator it =
-      std::find (udp_pipes.begin (), udp_pipes.end (), pipe_);
-    if (it != udp_pipes.end ())
-        udp_pipes.erase (it);
+    {
+        const udp_pipes_t::iterator end = _udp_pipes.end ();
+        const udp_pipes_t::iterator it =
+          std::find (_udp_pipes.begin (), end, pipe_);
+        if (it != end)
+            _udp_pipes.erase (it);
+    }
 
-    dist.pipe_terminated (pipe_);
+    _dist.pipe_terminated (pipe_);
 }
 
 int zmq::radio_t::xsend (msg_t *msg_)
@@ -146,21 +155,22 @@ int zmq::radio_t::xsend (msg_t *msg_)
         return -1;
     }
 
-    dist.unmatch ();
+    _dist.unmatch ();
 
     std::pair<subscriptions_t::iterator, subscriptions_t::iterator> range =
-      subscriptions.equal_range (std::string (msg_->group ()));
+      _subscriptions.equal_range (std::string (msg_->group ()));
 
     for (subscriptions_t::iterator it = range.first; it != range.second; ++it)
-        dist.match (it->second);
+        _dist.match (it->second);
 
-    for (udp_pipes_t::iterator it = udp_pipes.begin (); it != udp_pipes.end ();
-         ++it)
-        dist.match (*it);
+    for (udp_pipes_t::iterator it = _udp_pipes.begin (),
+                               end = _udp_pipes.end ();
+         it != end; ++it)
+        _dist.match (*it);
 
     int rc = -1;
-    if (lossy || dist.check_hwm ()) {
-        if (dist.send_to_matching (msg_) == 0) {
+    if (_lossy || _dist.check_hwm ()) {
+        if (_dist.send_to_matching (msg_) == 0) {
             rc = 0; //  Yay, sent successfully
         }
     } else
@@ -171,7 +181,7 @@ int zmq::radio_t::xsend (msg_t *msg_)
 
 bool zmq::radio_t::xhas_out ()
 {
-    return dist.has_out ();
+    return _dist.has_out ();
 }
 
 int zmq::radio_t::xrecv (msg_t *msg_)
@@ -193,7 +203,7 @@ zmq::radio_session_t::radio_session_t (io_thread_t *io_thread_,
                                        const options_t &options_,
                                        address_t *addr_) :
     session_base_t (io_thread_, connect_, socket_, options_, addr_),
-    state (group)
+    _state (group)
 {
 }
 
@@ -215,11 +225,11 @@ int zmq::radio_session_t::push_msg (msg_t *msg_)
 
         //  Set the msg type to either JOIN or LEAVE
         if (data_size >= 5 && memcmp (command_data, "\4JOIN", 5) == 0) {
-            group_length = (int) data_size - 5;
+            group_length = static_cast<int> (data_size) - 5;
             group = command_data + 5;
             rc = join_leave_msg.init_join ();
         } else if (data_size >= 6 && memcmp (command_data, "\5LEAVE", 6) == 0) {
-            group_length = (int) data_size - 6;
+            group_length = static_cast<int> (data_size) - 6;
             group = command_data + 6;
             rc = join_leave_msg.init_leave ();
         }
@@ -240,19 +250,19 @@ int zmq::radio_session_t::push_msg (msg_t *msg_)
         //  Push the join or leave command
         *msg_ = join_leave_msg;
         return session_base_t::push_msg (msg_);
-    } else
-        return session_base_t::push_msg (msg_);
+    }
+    return session_base_t::push_msg (msg_);
 }
 
 int zmq::radio_session_t::pull_msg (msg_t *msg_)
 {
-    if (state == group) {
-        int rc = session_base_t::pull_msg (&pending_msg);
+    if (_state == group) {
+        int rc = session_base_t::pull_msg (&_pending_msg);
         if (rc != 0)
             return rc;
 
-        const char *group = pending_msg.group ();
-        int length = (int) strlen (group);
+        const char *group = _pending_msg.group ();
+        int length = static_cast<int> (strlen (group));
 
         //  First frame is the group
         rc = msg_->init_size (length);
@@ -261,17 +271,16 @@ int zmq::radio_session_t::pull_msg (msg_t *msg_)
         memcpy (msg_->data (), group, length);
 
         //  Next status is the body
-        state = body;
-        return 0;
-    } else {
-        *msg_ = pending_msg;
-        state = group;
+        _state = body;
         return 0;
     }
+    *msg_ = _pending_msg;
+    _state = group;
+    return 0;
 }
 
 void zmq::radio_session_t::reset ()
 {
     session_base_t::reset ();
-    state = group;
+    _state = group;
 }

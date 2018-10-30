@@ -30,7 +30,6 @@
 #ifndef __ZMQ_PLAIN_SERVER_HPP_INCLUDED__
 #define __ZMQ_PLAIN_SERVER_HPP_INCLUDED__
 
-#include "mechanism.hpp"
 #include "options.hpp"
 #include "zap_client.hpp"
 
@@ -52,15 +51,15 @@ class plain_server_t : public zap_client_common_handshake_t
     virtual int process_handshake_command (msg_t *msg_);
 
   private:
-    int produce_welcome (msg_t *msg_) const;
-    int produce_ready (msg_t *msg_) const;
-    int produce_error (msg_t *msg_) const;
+    void produce_welcome (msg_t *msg_) const;
+    void produce_ready (msg_t *msg_) const;
+    void produce_error (msg_t *msg_) const;
 
     int process_hello (msg_t *msg_);
     int process_initiate (msg_t *msg_);
 
-    void send_zap_request (const std::string &username,
-                           const std::string &password);
+    void send_zap_request (const std::string &username_,
+                           const std::string &password_);
 };
 }
 

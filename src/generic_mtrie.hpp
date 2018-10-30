@@ -92,20 +92,31 @@ template <typename T> class generic_mtrie_t
                     void (*func_) (prefix_t data_, size_t size_, Arg arg_),
                     Arg arg_,
                     bool call_on_uniq_);
+    template <typename Arg>
+    void rm_helper_multiple_subnodes (unsigned char **buff_,
+                                      size_t buffsize_,
+                                      size_t maxbuffsize_,
+                                      void (*func_) (prefix_t data_,
+                                                     size_t size_,
+                                                     Arg arg_),
+                                      Arg arg_,
+                                      bool call_on_uniq_,
+                                      value_t *pipe_);
+
     rm_result rm_helper (prefix_t prefix_, size_t size_, value_t *value_);
     bool is_redundant () const;
 
     typedef std::set<value_t *> pipes_t;
-    pipes_t *pipes;
+    pipes_t *_pipes;
 
-    unsigned char min;
-    unsigned short count;
-    unsigned short live_nodes;
+    unsigned char _min;
+    unsigned short _count;
+    unsigned short _live_nodes;
     union
     {
         class generic_mtrie_t<value_t> *node;
         class generic_mtrie_t<value_t> **table;
-    } next;
+    } _next;
 
     generic_mtrie_t (const generic_mtrie_t<value_t> &);
     const generic_mtrie_t<value_t> &

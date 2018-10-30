@@ -60,7 +60,7 @@ void zmq_sleep (int seconds_)
 
 void *zmq_stopwatch_start ()
 {
-    uint64_t *watch = (uint64_t *) malloc (sizeof (uint64_t));
+    uint64_t *watch = static_cast<uint64_t *> (malloc (sizeof (uint64_t)));
     alloc_assert (watch);
     *watch = zmq::clock_t::now_us ();
     return (void *) watch;
@@ -69,8 +69,8 @@ void *zmq_stopwatch_start ()
 unsigned long zmq_stopwatch_intermediate (void *watch_)
 {
     uint64_t end = zmq::clock_t::now_us ();
-    uint64_t start = *(uint64_t *) watch_;
-    return (unsigned long) (end - start);
+    uint64_t start = *static_cast<uint64_t *> (watch_);
+    return static_cast<unsigned long> (end - start);
 }
 
 unsigned long zmq_stopwatch_stop (void *watch_)
@@ -80,19 +80,19 @@ unsigned long zmq_stopwatch_stop (void *watch_)
     return res;
 }
 
-void *zmq_threadstart (zmq_thread_fn *func, void *arg)
+void *zmq_threadstart (zmq_thread_fn *func_, void *arg_)
 {
     zmq::thread_t *thread = new (std::nothrow) zmq::thread_t;
     alloc_assert (thread);
-    thread->start (func, arg);
+    thread->start (func_, arg_);
     return thread;
 }
 
-void zmq_threadclose (void *thread)
+void zmq_threadclose (void *thread_)
 {
-    zmq::thread_t *pThread = static_cast<zmq::thread_t *> (thread);
-    pThread->stop ();
-    LIBZMQ_DELETE (pThread);
+    zmq::thread_t *p_thread = static_cast<zmq::thread_t *> (thread_);
+    p_thread->stop ();
+    LIBZMQ_DELETE (p_thread);
 }
 
 //  Z85 codec, taken from 0MQ RFC project, implements RFC32 Z85 encoding
@@ -127,31 +127,31 @@ static uint8_t decoder[96] = {
 //  dest. Size must be a multiple of 4.
 //  Returns NULL and sets errno = EINVAL for invalid input.
 
-char *zmq_z85_encode (char *dest, const uint8_t *data, size_t size)
+char *zmq_z85_encode (char *dest_, const uint8_t *data_, size_t size_)
 {
-    if (size % 4 != 0) {
+    if (size_ % 4 != 0) {
         errno = EINVAL;
         return NULL;
     }
     unsigned int char_nbr = 0;
     unsigned int byte_nbr = 0;
     uint32_t value = 0;
-    while (byte_nbr < size) {
+    while (byte_nbr < size_) {
         //  Accumulate value in base 256 (binary)
-        value = value * 256 + data[byte_nbr++];
+        value = value * 256 + data_[byte_nbr++];
         if (byte_nbr % 4 == 0) {
             //  Output value in base 85
             unsigned int divisor = 85 * 85 * 85 * 85;
             while (divisor) {
-                dest[char_nbr++] = encoder[value / divisor % 85];
+                dest_[char_nbr++] = encoder[value / divisor % 85];
                 divisor /= 85;
             }
             value = 0;
         }
     }
-    assert (char_nbr == size * 5 / 4);
-    dest[char_nbr] = 0;
-    return dest;
+    assert (char_nbr == size_ * 5 / 4);
+    dest_[char_nbr] = 0;
+    return dest_;
 }
 
 
@@ -161,19 +161,19 @@ char *zmq_z85_encode (char *dest, const uint8_t *data, size_t size)
 //  must be a multiple of 5.
 //  Returns NULL and sets errno = EINVAL for invalid input.
 
-uint8_t *zmq_z85_decode (uint8_t *dest, const char *string)
+uint8_t *zmq_z85_decode (uint8_t *dest_, const char *string_)
 {
     unsigned int byte_nbr = 0;
     unsigned int char_nbr = 0;
     uint32_t value = 0;
-    while (string[char_nbr]) {
+    while (string_[char_nbr]) {
         //  Accumulate value in base 85
         if (UINT32_MAX / 85 < value) {
             //  Invalid z85 encoding, represented value exceeds 0xffffffff
             goto error_inval;
         }
         value *= 85;
-        uint8_t index = string[char_nbr++] - 32;
+        uint8_t index = string_[char_nbr++] - 32;
         if (index >= sizeof (decoder)) {
             //  Invalid z85 encoding, character outside range
             goto error_inval;
@@ -188,7 +188,7 @@ uint8_t *zmq_z85_decode (uint8_t *dest, const char *string)
             //  Output value in base 256
             unsigned int divisor = 256 * 256 * 256;
             while (divisor) {
-                dest[byte_nbr++] = value / divisor % 256;
+                dest_[byte_nbr++] = value / divisor % 256;
                 divisor /= 256;
             }
             value = 0;
@@ -197,8 +197,8 @@ uint8_t *zmq_z85_decode (uint8_t *dest, const char *string)
     if (char_nbr % 5 != 0) {
         goto error_inval;
     }
-    assert (byte_nbr == strlen (string) * 4 / 5);
-    return dest;
+    assert (byte_nbr == strlen (string_) * 4 / 5);
+    return dest_;
 
 error_inval:
     errno = EINVAL;
@@ -211,7 +211,7 @@ error_inval:
 //  Returns 0 on success, -1 on failure, setting errno.
 //  Sets errno = ENOTSUP in the absence of a CURVE library.
 
-int zmq_curve_keypair (char *z85_public_key, char *z85_secret_key)
+int zmq_curve_keypair (char *z85_public_key_, char *z85_secret_key_)
 {
 #if defined(ZMQ_HAVE_CURVE)
 #if crypto_box_PUBLICKEYBYTES != 32 || crypto_box_SECRETKEYBYTES != 32
@@ -224,14 +224,14 @@ int zmq_curve_keypair (char *z85_public_key, char *z85_secret_key)
     zmq::random_open ();
 
     int res = crypto_box_keypair (public_key, secret_key);
-    zmq_z85_encode (z85_public_key, public_key, 32);
-    zmq_z85_encode (z85_secret_key, secret_key, 32);
+    zmq_z85_encode (z85_public_key_, public_key, 32);
+    zmq_z85_encode (z85_secret_key_, secret_key, 32);
 
     zmq::random_close ();
 
     return res;
 #else
-    (void) z85_public_key, (void) z85_secret_key;
+    (void) z85_public_key_, (void) z85_secret_key_;
     errno = ENOTSUP;
     return -1;
 #endif
@@ -243,7 +243,7 @@ int zmq_curve_keypair (char *z85_public_key, char *z85_secret_key)
 //  Returns 0 on success, -1 on failure, setting errno.
 //  Sets errno = ENOTSUP in the absence of a CURVE library.
 
-int zmq_curve_public (char *z85_public_key, const char *z85_secret_key)
+int zmq_curve_public (char *z85_public_key_, const char *z85_secret_key_)
 {
 #if defined(ZMQ_HAVE_CURVE)
 #if crypto_box_PUBLICKEYBYTES != 32 || crypto_box_SECRETKEYBYTES != 32
@@ -255,18 +255,18 @@ int zmq_curve_public (char *z85_public_key, const char *z85_secret_key)
 
     zmq::random_open ();
 
-    if (zmq_z85_decode (secret_key, z85_secret_key) == NULL)
+    if (zmq_z85_decode (secret_key, z85_secret_key_) == NULL)
         return -1;
 
     // Return codes are suppressed as none of these can actually fail.
     crypto_scalarmult_base (public_key, secret_key);
-    zmq_z85_encode (z85_public_key, public_key, 32);
+    zmq_z85_encode (z85_public_key_, public_key, 32);
 
     zmq::random_close ();
 
     return 0;
 #else
-    (void) z85_public_key, (void) z85_secret_key;
+    (void) z85_public_key_, (void) z85_secret_key_;
     errno = ENOTSUP;
     return -1;
 #endif
@@ -287,14 +287,14 @@ void *zmq_atomic_counter_new (void)
 
 void zmq_atomic_counter_set (void *counter_, int value_)
 {
-    ((zmq::atomic_counter_t *) counter_)->set (value_);
+    (static_cast<zmq::atomic_counter_t *> (counter_))->set (value_);
 }
 
 //  Increment the atomic counter, and return the old value
 
 int zmq_atomic_counter_inc (void *counter_)
 {
-    return ((zmq::atomic_counter_t *) counter_)->add (1);
+    return (static_cast<zmq::atomic_counter_t *> (counter_))->add (1);
 }
 
 //  Decrement the atomic counter and return 1 (if counter >= 1), or
@@ -302,20 +302,20 @@ int zmq_atomic_counter_inc (void *counter_)
 
 int zmq_atomic_counter_dec (void *counter_)
 {
-    return ((zmq::atomic_counter_t *) counter_)->sub (1) ? 1 : 0;
+    return (static_cast<zmq::atomic_counter_t *> (counter_))->sub (1) ? 1 : 0;
 }
 
 //  Return actual value of atomic counter
 
 int zmq_atomic_counter_value (void *counter_)
 {
-    return ((zmq::atomic_counter_t *) counter_)->get ();
+    return (static_cast<zmq::atomic_counter_t *> (counter_))->get ();
 }
 
 //  Destroy atomic counter, and set reference to NULL
 
 void zmq_atomic_counter_destroy (void **counter_p_)
 {
-    delete ((zmq::atomic_counter_t *) *counter_p_);
+    delete (static_cast<zmq::atomic_counter_t *> (*counter_p_));
     *counter_p_ = NULL;
 }

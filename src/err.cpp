@@ -29,6 +29,7 @@
 
 #include "precompiled.hpp"
 #include "err.hpp"
+#include "macros.hpp"
 
 const char *zmq::errno_to_string (int errno_)
 {
@@ -82,7 +83,7 @@ void zmq::zmq_abort (const char *errmsg_)
     extra_info[0] = (ULONG_PTR) errmsg_;
     RaiseException (0x40000015, EXCEPTION_NONCONTINUABLE, 1, extra_info);
 #else
-    (void) errmsg_;
+    LIBZMQ_UNUSED (errmsg_);
     print_backtrace ();
     abort ();
 #endif
@@ -95,7 +96,7 @@ const char *zmq::wsa_error ()
     return wsa_error_no (WSAGetLastError (), NULL);
 }
 
-const char *zmq::wsa_error_no (int no_, const char *wsae_wouldblock_string)
+const char *zmq::wsa_error_no (int no_, const char *wsae_wouldblock_string_)
 {
     //  TODO:  It seems that list of Windows socket errors is longer than this.
     //         Investigate whether there's a way to convert it into the string
@@ -116,7 +117,7 @@ const char *zmq::wsa_error_no (int no_, const char *wsae_wouldblock_string)
         case WSAEMFILE:
             return "Too many open files";
         case WSAEWOULDBLOCK:
-            return wsae_wouldblock_string;
+            return wsae_wouldblock_string_;
         case WSAEINPROGRESS:
             return "Operation now in progress";
         case WSAEALREADY:
@@ -219,15 +220,15 @@ void zmq::win_error (char *buffer_, size_t buffer_size_)
 #else
     DWORD rc = FormatMessageA (
       FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, errcode,
-      MAKELANGID (LANG_NEUTRAL, SUBLANG_DEFAULT), buffer_, (DWORD) buffer_size_,
-      NULL);
+      MAKELANGID (LANG_NEUTRAL, SUBLANG_DEFAULT), buffer_,
+      static_cast<DWORD> (buffer_size_), NULL);
 #endif
     zmq_assert (rc);
 }
 
-int zmq::wsa_error_to_errno (int errcode)
+int zmq::wsa_error_to_errno (int errcode_)
 {
-    switch (errcode) {
+    switch (errcode_) {
             //  10004 - Interrupted system call.
         case WSAEINTR:
             return EINTR;
@@ -387,7 +388,7 @@ int zmq::wsa_error_to_errno (int errcode)
 
 #endif
 
-#ifdef HAVE_LIBUNWIND
+#if defined(HAVE_LIBUNWIND) && !defined(__SUNPRO_CC)
 
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
@@ -444,7 +445,7 @@ void zmq::print_backtrace (void)
 
 #else
 
-void zmq::print_backtrace (void)
+void zmq::print_backtrace ()
 {
 }
 

@@ -56,8 +56,16 @@
 namespace zmq
 {
 const char *errno_to_string (int errno_);
+#if defined __clang__
+#if __has_feature(attribute_analyzer_noreturn)
+void zmq_abort (const char *errmsg_) __attribute__ ((analyzer_noreturn));
+#endif
+#elif defined __MSCVER__
+__declspec(noreturn) void zmq_abort (const char *errmsg_);
+#else
 void zmq_abort (const char *errmsg_);
-void print_backtrace (void);
+#endif
+void print_backtrace ();
 }
 
 #ifdef ZMQ_HAVE_WINDOWS
@@ -67,9 +75,9 @@ namespace zmq
 const char *wsa_error ();
 const char *
 wsa_error_no (int no_,
-              const char *wsae_wouldblock_string = "Operation would block");
+              const char *wsae_wouldblock_string_ = "Operation would block");
 void win_error (char *buffer_, size_t buffer_size_);
-int wsa_error_to_errno (int errcode);
+int wsa_error_to_errno (int errcode_);
 }
 
 //  Provides convenient way to check WSA-style errors on Windows.
