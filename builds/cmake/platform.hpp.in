@@ -1,12 +1,15 @@
 #ifndef __ZMQ_PLATFORM_HPP_INCLUDED__
 #define __ZMQ_PLATFORM_HPP_INCLUDED__
 
-#cmakedefine ZMQ_USE_KQUEUE
-#cmakedefine ZMQ_USE_EPOLL
-#cmakedefine ZMQ_USE_EPOLL_CLOEXEC
-#cmakedefine ZMQ_USE_DEVPOLL
-#cmakedefine ZMQ_USE_POLL
-#cmakedefine ZMQ_USE_SELECT
+#cmakedefine ZMQ_IOTHREAD_POLLER_USE_KQUEUE
+#cmakedefine ZMQ_IOTHREAD_POLLER_USE_EPOLL
+#cmakedefine ZMQ_IOTHREAD_POLLER_USE_EPOLL_CLOEXEC
+#cmakedefine ZMQ_IOTHREAD_POLLER_USE_DEVPOLL
+#cmakedefine ZMQ_IOTHREAD_POLLER_USE_POLL
+#cmakedefine ZMQ_IOTHREAD_POLLER_USE_SELECT
+
+#cmakedefine ZMQ_POLL_BASED_ON_SELECT
+#cmakedefine ZMQ_POLL_BASED_ON_POLL
 
 #cmakedefine ZMQ_FORCE_MUTEXES
 
@@ -15,6 +18,8 @@
 #cmakedefine HAVE_GETHRTIME
 #cmakedefine HAVE_MKDTEMP
 #cmakedefine ZMQ_HAVE_UIO
+
+#cmakedefine ZMQ_HAVE_NOEXCEPT
 
 #cmakedefine ZMQ_HAVE_EVENTFD
 #cmakedefine ZMQ_HAVE_EVENTFD_CLOEXEC
@@ -50,7 +55,7 @@
   #define ZMQ_HAVE_AIX
 #endif
 
-#if defined ANDROID
+#if defined __ANDROID__
   #define ZMQ_HAVE_ANDROID
 #endif
 

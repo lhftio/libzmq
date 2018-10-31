@@ -5,7 +5,6 @@
 #include "io_object.hpp"
 #include "i_engine.hpp"
 #include "address.hpp"
-#include "udp_address.hpp"
 #include "msg.hpp"
 
 #define MAX_UDP_MSG 8192
@@ -33,7 +32,7 @@ class udp_engine_t : public io_object_t, public i_engine
 
     //  This method is called by the session to signalise that more
     //  messages can be written to the pipe.
-    void restart_input ();
+    bool restart_input ();
 
     //  This method is called by the session to signalise that there
     //  are messages to send available.
@@ -48,25 +47,25 @@ class udp_engine_t : public io_object_t, public i_engine
 
   private:
     int resolve_raw_address (char *addr_, size_t length_);
-    void sockaddr_to_msg (zmq::msg_t *msg, sockaddr_in *addr);
+    void sockaddr_to_msg (zmq::msg_t *msg_, sockaddr_in *addr_);
 
-    bool plugged;
+    bool _plugged;
 
-    fd_t fd;
-    session_base_t *session;
-    handle_t handle;
-    address_t *address;
+    fd_t _fd;
+    session_base_t *_session;
+    handle_t _handle;
+    address_t *_address;
 
-    options_t options;
+    options_t _options;
 
-    sockaddr_in raw_address;
-    const struct sockaddr *out_address;
-    socklen_t out_addrlen;
+    sockaddr_in _raw_address;
+    const struct sockaddr *_out_address;
+    socklen_t _out_address_len;
 
-    unsigned char out_buffer[MAX_UDP_MSG];
-    unsigned char in_buffer[MAX_UDP_MSG];
-    bool send_enabled;
-    bool recv_enabled;
+    char _out_buffer[MAX_UDP_MSG];
+    char _in_buffer[MAX_UDP_MSG];
+    bool _send_enabled;
+    bool _recv_enabled;
 };
 }
 

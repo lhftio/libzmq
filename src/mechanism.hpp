@@ -73,44 +73,48 @@ class mechanism_t
     //  Returns the status of this mechanism.
     virtual status_t status () const = 0;
 
-    void set_peer_routing_id (const void *id_ptr, size_t id_size);
+    void set_peer_routing_id (const void *id_ptr_, size_t id_size_);
 
     void peer_routing_id (msg_t *msg_);
 
-    void set_user_id (const void *user_id, size_t size);
+    void set_user_id (const void *user_id_, size_t size_);
 
     const blob_t &get_user_id () const;
 
-    const metadata_t::dict_t &get_zmtp_properties () { return zmtp_properties; }
+    const metadata_t::dict_t &get_zmtp_properties ()
+    {
+        return _zmtp_properties;
+    }
 
-    const metadata_t::dict_t &get_zap_properties () { return zap_properties; }
+    const metadata_t::dict_t &get_zap_properties () { return _zap_properties; }
 
   protected:
     //  Only used to identify the socket for the Socket-Type
     //  property in the wire protocol.
-    const char *socket_type_string (int socket_type) const;
+    const char *socket_type_string (int socket_type_) const;
 
-    static size_t add_property (unsigned char *ptr,
-                                size_t ptr_capacity,
-                                const char *name,
-                                const void *value,
-                                size_t value_len);
-    static size_t property_len (const char *name, size_t value_len);
+    static size_t add_property (unsigned char *ptr_,
+                                size_t ptr_capacity_,
+                                const char *name_,
+                                const void *value_,
+                                size_t value_len_);
+    static size_t property_len (const char *name_, size_t value_len_);
 
-    size_t add_basic_properties (unsigned char *ptr, size_t ptr_capacity) const;
+    size_t add_basic_properties (unsigned char *ptr_,
+                                 size_t ptr_capacity_) const;
     size_t basic_properties_len () const;
 
     void make_command_with_basic_properties (msg_t *msg_,
-                                             const char *prefix,
-                                             size_t prefix_len) const;
+                                             const char *prefix_,
+                                             size_t prefix_len_) const;
 
     //  Parses a metadata.
     //  Metadata consists of a list of properties consisting of
     //  name and value as size-specified strings.
     //  Returns 0 on success and -1 on error, in which case errno is set.
     int parse_metadata (const unsigned char *ptr_,
-                        size_t length,
-                        bool zap_flag = false);
+                        size_t length_,
+                        bool zap_flag_ = false);
 
     //  This is called by parse_property method whenever it
     //  parses a new property. The function should return 0
@@ -122,18 +126,18 @@ class mechanism_t
     virtual int
     property (const std::string &name_, const void *value_, size_t length_);
 
-    //  Properties received from ZMTP peer.
-    metadata_t::dict_t zmtp_properties;
-
-    //  Properties received from ZAP server.
-    metadata_t::dict_t zap_properties;
-
     const options_t options;
 
   private:
-    blob_t routing_id;
+    //  Properties received from ZMTP peer.
+    metadata_t::dict_t _zmtp_properties;
 
-    blob_t user_id;
+    //  Properties received from ZAP server.
+    metadata_t::dict_t _zap_properties;
+
+    blob_t _routing_id;
+
+    blob_t _user_id;
 
     //  Returns true iff socket associated with the mechanism
     //  is compatible with a given socket type 'type_'.

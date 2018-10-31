@@ -30,8 +30,7 @@
 #include "precompiled.hpp"
 #include "encoder.hpp"
 #include "raw_encoder.hpp"
-#include "likely.hpp"
-#include "wire.hpp"
+#include "msg.hpp"
 
 zmq::raw_encoder_t::raw_encoder_t (size_t bufsize_) :
     encoder_base_t<raw_encoder_t> (bufsize_)
@@ -46,6 +45,6 @@ zmq::raw_encoder_t::~raw_encoder_t ()
 
 void zmq::raw_encoder_t::raw_message_ready ()
 {
-    next_step (in_progress->data (), in_progress->size (),
+    next_step (in_progress ()->data (), in_progress ()->size (),
                &raw_encoder_t::raw_message_ready, true);
 }

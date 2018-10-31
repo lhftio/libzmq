@@ -33,17 +33,19 @@
 #include "stdint.hpp"
 
 #if defined ZMQ_HAVE_OSX
-#include <mach/clock.h>
-#include <mach/mach.h>
-#include <time.h>
-#include <sys/time.h>
-int alt_clock_gettime (int clock_id, timespec *ts);
+// TODO this is not required in this file, but condition_variable.hpp includes
+// clock.hpp to get these definitions
 #ifndef CLOCK_REALTIME
 #define CLOCK_REALTIME 0
 #endif
 #ifndef HAVE_CLOCK_GETTIME
 #define HAVE_CLOCK_GETTIME
 #endif
+
+#include <mach/clock.h>
+#include <mach/mach.h>
+#include <time.h>
+#include <sys/time.h>
 #endif
 
 namespace zmq
@@ -52,7 +54,6 @@ class clock_t
 {
   public:
     clock_t ();
-    ~clock_t ();
 
     //  CPU's timestamp counter. Returns 0 if it's not available.
     static uint64_t rdtsc ();
@@ -66,10 +67,10 @@ class clock_t
 
   private:
     //  TSC timestamp of when last time measurement was made.
-    uint64_t last_tsc;
+    uint64_t _last_tsc;
 
     //  Physical time corresponding to the TSC above (in milliseconds).
-    uint64_t last_time;
+    uint64_t _last_time;
 
     clock_t (const clock_t &);
     const clock_t &operator= (const clock_t &);

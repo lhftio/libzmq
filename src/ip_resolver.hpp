@@ -48,11 +48,11 @@ union ip_addr_t
     uint16_t port () const;
 
     const struct sockaddr *as_sockaddr () const;
-    size_t sockaddr_len () const;
+    socklen_t sockaddr_len () const;
 
     void set_port (uint16_t);
 
-    static ip_addr_t any (int family);
+    static ip_addr_t any (int family_);
 };
 
 class ip_resolver_options_t
@@ -73,11 +73,11 @@ class ip_resolver_options_t
     bool allow_dns ();
 
   private:
-    bool bindable_wanted;
-    bool nic_name_allowed;
-    bool ipv6_wanted;
-    bool port_expected;
-    bool dns_allowed;
+    bool _bindable_wanted;
+    bool _nic_name_allowed;
+    bool _ipv6_wanted;
+    bool _port_expected;
+    bool _dns_allowed;
 };
 
 class ip_resolver_t
@@ -88,17 +88,7 @@ class ip_resolver_t
     int resolve (ip_addr_t *ip_addr_, const char *name_);
 
   protected:
-    ip_resolver_options_t options;
-
-    int resolve_nic_name (ip_addr_t *ip_addr_, const char *nic_);
-    int resolve_getaddrinfo (ip_addr_t *ip_addr_, const char *addr_);
-
-#if defined ZMQ_HAVE_WINDOWS
-    int get_interface_name (unsigned long index, char **dest) const;
-    int wchar_to_utf8 (const WCHAR *src, char **dest) const;
-#endif
-
-    //  Virtual functions that are overriden in tests
+    //  Virtual functions that are overridden in tests
     virtual int do_getaddrinfo (const char *node_,
                                 const char *service_,
                                 const struct addrinfo *hints_,
@@ -107,6 +97,17 @@ class ip_resolver_t
     virtual void do_freeaddrinfo (struct addrinfo *res_);
 
     virtual unsigned int do_if_nametoindex (const char *ifname_);
+
+  private:
+    ip_resolver_options_t _options;
+
+    int resolve_nic_name (ip_addr_t *ip_addr_, const char *nic_);
+    int resolve_getaddrinfo (ip_addr_t *ip_addr_, const char *addr_);
+
+#if defined ZMQ_HAVE_WINDOWS
+    int get_interface_name (unsigned long index_, char **dest_) const;
+    int wchar_to_utf8 (const WCHAR *src_, char **dest_) const;
+#endif
 };
 }
 

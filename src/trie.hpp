@@ -64,18 +64,18 @@ class trie_t
                        void (*func_) (unsigned char *data_,
                                       size_t size_,
                                       void *arg_),
-                       void *arg_);
+                       void *arg_) const;
     bool is_redundant () const;
 
-    uint32_t refcnt;
-    unsigned char min;
-    unsigned short count;
-    unsigned short live_nodes;
+    uint32_t _refcnt;
+    unsigned char _min;
+    unsigned short _count;
+    unsigned short _live_nodes;
     union
     {
         class trie_t *node;
         class trie_t **table;
-    } next;
+    } _next;
 
     trie_t (const trie_t &);
     const trie_t &operator= (const trie_t &);

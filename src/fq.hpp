@@ -32,11 +32,12 @@
 
 #include "array.hpp"
 #include "blob.hpp"
-#include "pipe.hpp"
-#include "msg.hpp"
 
 namespace zmq
 {
+class msg_t;
+class pipe_t;
+
 //  Class manages a set of inbound pipes. On receive it performs fair
 //  queueing so that senders gone berserk won't cause denial of
 //  service for decent senders.
@@ -54,31 +55,27 @@ class fq_t
     int recv (msg_t *msg_);
     int recvpipe (msg_t *msg_, pipe_t **pipe_);
     bool has_in ();
-    const blob_t &get_credential () const;
 
   private:
     //  Inbound pipes.
     typedef array_t<pipe_t, 1> pipes_t;
-    pipes_t pipes;
+    pipes_t _pipes;
 
     //  Number of active pipes. All the active pipes are located at the
     //  beginning of the pipes array.
-    pipes_t::size_type active;
+    pipes_t::size_type _active;
 
     //  Pointer to the last pipe we received message from.
     //  NULL when no message has been received or the pipe
     //  has terminated.
-    pipe_t *last_in;
+    pipe_t *_last_in;
 
     //  Index of the next bound pipe to read a message from.
-    pipes_t::size_type current;
+    pipes_t::size_type _current;
 
     //  If true, part of a multipart message was already received, but
     //  there are following parts still waiting in the current pipe.
-    bool more;
-
-    //  Holds credential after the last_active_pipe has terminated.
-    blob_t saved_credential;
+    bool _more;
 
     fq_t (const fq_t &);
     const fq_t &operator= (const fq_t &);

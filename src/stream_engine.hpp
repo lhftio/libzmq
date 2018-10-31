@@ -40,6 +40,7 @@
 #include "options.hpp"
 #include "socket_base.hpp"
 #include "metadata.hpp"
+#include "msg.hpp"
 
 namespace zmq
 {
@@ -51,7 +52,6 @@ enum
 };
 
 class io_thread_t;
-class msg_t;
 class session_base_t;
 class mechanism_t;
 
@@ -70,13 +70,13 @@ class stream_engine_t : public io_object_t, public i_engine
 
     stream_engine_t (fd_t fd_,
                      const options_t &options_,
-                     const std::string &endpoint);
+                     const std::string &endpoint_);
     ~stream_engine_t ();
 
     //  i_engine interface implementation.
     void plug (zmq::io_thread_t *io_thread_, zmq::session_base_t *session_);
     void terminate ();
-    void restart_input ();
+    bool restart_input ();
     void restart_output ();
     void zap_msg_available ();
     const char *get_endpoint () const;
@@ -91,24 +91,34 @@ class stream_engine_t : public io_object_t, public i_engine
     void unplug ();
 
     //  Function to handle network disconnections.
-    void error (error_reason_t reason);
-
-    //  Receives the greeting message from the peer.
-    int receive_greeting ();
+    void error (error_reason_t reason_);
 
     //  Detects the protocol used by the peer.
     bool handshake ();
 
+    //  Receive the greeting from the peer.
+    int receive_greeting ();
+    void receive_greeting_versioned ();
+
+    typedef bool (stream_engine_t::*handshake_fun_t) ();
+    static handshake_fun_t select_handshake_fun (bool unversioned,
+                                                 unsigned char revision);
+
+    bool handshake_v1_0_unversioned ();
+    bool handshake_v1_0 ();
+    bool handshake_v2_0 ();
+    bool handshake_v3_0 ();
+
     int routing_id_msg (msg_t *msg_);
     int process_routing_id_msg (msg_t *msg_);
 
-    int next_handshake_command (msg_t *msg);
-    int process_handshake_command (msg_t *msg);
+    int next_handshake_command (msg_t *msg_);
+    int process_handshake_command (msg_t *msg_);
 
     int pull_msg_from_session (msg_t *msg_);
-    int push_msg_to_session (msg_t *msg);
+    int push_msg_to_session (msg_t *msg_);
 
-    int push_raw_msg_to_session (msg_t *msg);
+    int push_raw_msg_to_session (msg_t *msg_);
 
     int write_credential (msg_t *msg_);
     int pull_and_encode (msg_t *msg_);
@@ -117,45 +127,45 @@ class stream_engine_t : public io_object_t, public i_engine
 
     void mechanism_ready ();
 
-    size_t add_property (unsigned char *ptr,
-                         const char *name,
-                         const void *value,
-                         size_t value_len);
+    size_t add_property (unsigned char *ptr_,
+                         const char *name_,
+                         const void *value_,
+                         size_t value_len_);
 
     void set_handshake_timer ();
 
     typedef metadata_t::dict_t properties_t;
-    bool init_properties (properties_t &properties);
+    bool init_properties (properties_t &properties_);
 
+    int process_command_message (msg_t *msg_);
     int produce_ping_message (msg_t *msg_);
     int process_heartbeat_message (msg_t *msg_);
     int produce_pong_message (msg_t *msg_);
 
     //  Underlying socket.
-    fd_t s;
+    fd_t _s;
 
-    //  True iff this is server's engine.
-    bool as_server;
+    msg_t _tx_msg;
+    //  Need to store PING payload for PONG
+    msg_t _pong_msg;
 
-    msg_t tx_msg;
+    handle_t _handle;
 
-    handle_t handle;
+    unsigned char *_inpos;
+    size_t _insize;
+    i_decoder *_decoder;
 
-    unsigned char *inpos;
-    size_t insize;
-    i_decoder *decoder;
-
-    unsigned char *outpos;
-    size_t outsize;
-    i_encoder *encoder;
+    unsigned char *_outpos;
+    size_t _outsize;
+    i_encoder *_encoder;
 
     //  Metadata to be attached to received messages. May be NULL.
-    metadata_t *metadata;
+    metadata_t *_metadata;
 
     //  When true, we are still trying to determine whether
     //  the peer is using versioned protocol, and if so, which
     //  version.  When false, normal message flow has started.
-    bool handshaking;
+    bool _handshaking;
 
     static const size_t signature_size = 10;
 
@@ -166,43 +176,43 @@ class stream_engine_t : public io_object_t, public i_engine
     static const size_t v3_greeting_size = 64;
 
     //  Expected greeting size.
-    size_t greeting_size;
+    size_t _greeting_size;
 
     //  Greeting received from, and sent to peer
-    unsigned char greeting_recv[v3_greeting_size];
-    unsigned char greeting_send[v3_greeting_size];
+    unsigned char _greeting_recv[v3_greeting_size];
+    unsigned char _greeting_send[v3_greeting_size];
 
     //  Size of greeting received so far
-    unsigned int greeting_bytes_read;
+    unsigned int _greeting_bytes_read;
 
     //  The session this engine is attached to.
-    zmq::session_base_t *session;
+    zmq::session_base_t *_session;
 
-    const options_t options;
+    const options_t _options;
 
     // String representation of endpoint
-    std::string endpoint;
+    std::string _endpoint;
 
-    bool plugged;
+    bool _plugged;
 
-    int (stream_engine_t::*next_msg) (msg_t *msg_);
+    int (stream_engine_t::*_next_msg) (msg_t *msg_);
 
-    int (stream_engine_t::*process_msg) (msg_t *msg_);
+    int (stream_engine_t::*_process_msg) (msg_t *msg_);
 
-    bool io_error;
+    bool _io_error;
 
     //  Indicates whether the engine is to inject a phantom
     //  subscription message into the incoming stream.
     //  Needed to support old peers.
-    bool subscription_required;
+    bool _subscription_required;
 
-    mechanism_t *mechanism;
+    mechanism_t *_mechanism;
 
     //  True iff the engine couldn't consume the last decoded message.
-    bool input_stopped;
+    bool _input_stopped;
 
     //  True iff the engine doesn't have any message to encode.
-    bool output_stopped;
+    bool _output_stopped;
 
     //  ID of the handshake timer
     enum
@@ -211,7 +221,7 @@ class stream_engine_t : public io_object_t, public i_engine
     };
 
     //  True is linger timer is running.
-    bool has_handshake_timer;
+    bool _has_handshake_timer;
 
     //  Heartbeat stuff
     enum
@@ -220,15 +230,15 @@ class stream_engine_t : public io_object_t, public i_engine
         heartbeat_timeout_timer_id = 0x81,
         heartbeat_ttl_timer_id = 0x82
     };
-    bool has_ttl_timer;
-    bool has_timeout_timer;
-    bool has_heartbeat_timer;
-    int heartbeat_timeout;
+    bool _has_ttl_timer;
+    bool _has_timeout_timer;
+    bool _has_heartbeat_timer;
+    int _heartbeat_timeout;
 
     // Socket
-    zmq::socket_base_t *socket;
+    zmq::socket_base_t *_socket;
 
-    std::string peer_address;
+    std::string _peer_address;
 
     stream_engine_t (const stream_engine_t &);
     const stream_engine_t &operator= (const stream_engine_t &);

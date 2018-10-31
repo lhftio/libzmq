@@ -42,7 +42,7 @@ class socket_base_t;
 class rep_t : public router_t
 {
   public:
-    rep_t (zmq::ctx_t *parent_, uint32_t tid_, int sid);
+    rep_t (zmq::ctx_t *parent_, uint32_t tid_, int sid_);
     ~rep_t ();
 
     //  Overrides of functions from socket_base_t.
@@ -54,11 +54,11 @@ class rep_t : public router_t
   private:
     //  If true, we are in process of sending the reply. If false we are
     //  in process of receiving a request.
-    bool sending_reply;
+    bool _sending_reply;
 
     //  If true, we are starting to receive a request. The beginning
     //  of the request is the backtrace stack.
-    bool request_begins;
+    bool _request_begins;
 
     rep_t (const rep_t &);
     const rep_t &operator= (const rep_t &);

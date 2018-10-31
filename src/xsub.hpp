@@ -50,12 +50,13 @@ class xsub_t : public socket_base_t
 
   protected:
     //  Overrides of functions from socket_base_t.
-    void xattach_pipe (zmq::pipe_t *pipe_, bool subscribe_to_all_);
+    void xattach_pipe (zmq::pipe_t *pipe_,
+                       bool subscribe_to_all_,
+                       bool locally_initiated_);
     int xsend (zmq::msg_t *msg_);
     bool xhas_out ();
     int xrecv (zmq::msg_t *msg_);
     bool xhas_in ();
-    const blob_t &get_credential () const;
     void xread_activated (zmq::pipe_t *pipe_);
     void xwrite_activated (zmq::pipe_t *pipe_);
     void xhiccuped (pipe_t *pipe_);
@@ -71,22 +72,22 @@ class xsub_t : public socket_base_t
     send_subscription (unsigned char *data_, size_t size_, void *arg_);
 
     //  Fair queueing object for inbound pipes.
-    fq_t fq;
+    fq_t _fq;
 
     //  Object for distributing the subscriptions upstream.
-    dist_t dist;
+    dist_t _dist;
 
     //  The repository of subscriptions.
-    trie_t subscriptions;
+    trie_t _subscriptions;
 
     //  If true, 'message' contains a matching message to return on the
     //  next recv call.
-    bool has_message;
-    msg_t message;
+    bool _has_message;
+    msg_t _message;
 
     //  If true, part of a multipart message was already received, but
     //  there are following parts still waiting.
-    bool more;
+    bool _more;
 
     xsub_t (const xsub_t &);
     const xsub_t &operator= (const xsub_t &);

@@ -88,98 +88,132 @@
 #endif
 #endif
 
+// duplicated from fd.hpp
+#ifdef ZMQ_HAVE_WINDOWS
+#define close closesocket
+typedef int socket_size_t;
+const char *as_setsockopt_opt_t (const void *opt)
+{
+    return static_cast<const char *> (opt);
+}
+#if defined _MSC_VER && _MSC_VER <= 1400
+typedef UINT_PTR fd_t;
+enum
+{
+    retired_fd = (fd_t) (~0)
+};
+#else
+typedef SOCKET fd_t;
+enum
+{
+    retired_fd = (fd_t) INVALID_SOCKET
+};
+#endif
+#else
+typedef size_t socket_size_t;
+const void *as_setsockopt_opt_t (const void *opt_)
+{
+    return opt_;
+}
+typedef int fd_t;
+enum
+{
+    retired_fd = -1
+};
+#endif
+
 #define LIBZMQ_UNUSED(object) (void) object
 
 //  Bounce a message from client to server and back
 //  For REQ/REP or DEALER/DEALER pairs only
-void bounce (void *server, void *client)
+void bounce (void *server_, void *client_)
 {
     const char *content = "12345678ABCDEFGH12345678abcdefgh";
 
     //  Send message from client to server
-    int rc = zmq_send (client, content, 32, ZMQ_SNDMORE);
+    int rc = zmq_send (client_, content, 32, ZMQ_SNDMORE);
     assert (rc == 32);
-    rc = zmq_send (client, content, 32, 0);
+    rc = zmq_send (client_, content, 32, 0);
     assert (rc == 32);
 
     //  Receive message at server side
     char buffer[32];
-    rc = zmq_recv (server, buffer, 32, 0);
+    rc = zmq_recv (server_, buffer, 32, 0);
     assert (rc == 32);
     //  Check that message is still the same
     assert (memcmp (buffer, content, 32) == 0);
     int rcvmore;
     size_t sz = sizeof (rcvmore);
-    rc = zmq_getsockopt (server, ZMQ_RCVMORE, &rcvmore, &sz);
+    rc = zmq_getsockopt (server_, ZMQ_RCVMORE, &rcvmore, &sz);
     assert (rc == 0);
     assert (rcvmore);
-    rc = zmq_recv (server, buffer, 32, 0);
+    rc = zmq_recv (server_, buffer, 32, 0);
     assert (rc == 32);
     //  Check that message is still the same
     assert (memcmp (buffer, content, 32) == 0);
-    rc = zmq_getsockopt (server, ZMQ_RCVMORE, &rcvmore, &sz);
+    rc = zmq_getsockopt (server_, ZMQ_RCVMORE, &rcvmore, &sz);
     assert (rc == 0);
     assert (!rcvmore);
 
     //  Send two parts back to client
-    rc = zmq_send (server, buffer, 32, ZMQ_SNDMORE);
+    rc = zmq_send (server_, buffer, 32, ZMQ_SNDMORE);
     assert (rc == 32);
-    rc = zmq_send (server, buffer, 32, 0);
+    rc = zmq_send (server_, buffer, 32, 0);
     assert (rc == 32);
 
     //  Receive the two parts at the client side
-    rc = zmq_recv (client, buffer, 32, 0);
+    rc = zmq_recv (client_, buffer, 32, 0);
     assert (rc == 32);
     //  Check that message is still the same
     assert (memcmp (buffer, content, 32) == 0);
-    rc = zmq_getsockopt (client, ZMQ_RCVMORE, &rcvmore, &sz);
+    rc = zmq_getsockopt (client_, ZMQ_RCVMORE, &rcvmore, &sz);
     assert (rc == 0);
     assert (rcvmore);
-    rc = zmq_recv (client, buffer, 32, 0);
+    rc = zmq_recv (client_, buffer, 32, 0);
     assert (rc == 32);
     //  Check that message is still the same
     assert (memcmp (buffer, content, 32) == 0);
-    rc = zmq_getsockopt (client, ZMQ_RCVMORE, &rcvmore, &sz);
+    rc = zmq_getsockopt (client_, ZMQ_RCVMORE, &rcvmore, &sz);
     assert (rc == 0);
     assert (!rcvmore);
 }
 
 //  Same as bounce, but expect messages to never arrive
 //  for security or subscriber reasons.
-void expect_bounce_fail (void *server, void *client)
+void expect_bounce_fail (void *server_, void *client_)
 {
     const char *content = "12345678ABCDEFGH12345678abcdefgh";
     char buffer[32];
     int timeout = 250;
 
     //  Send message from client to server
-    int rc = zmq_setsockopt (client, ZMQ_SNDTIMEO, &timeout, sizeof (int));
+    int rc = zmq_setsockopt (client_, ZMQ_SNDTIMEO, &timeout, sizeof (int));
     assert (rc == 0);
-    rc = zmq_send (client, content, 32, ZMQ_SNDMORE);
+    rc = zmq_send (client_, content, 32, ZMQ_SNDMORE);
     assert ((rc == 32) || ((rc == -1) && (errno == EAGAIN)));
-    rc = zmq_send (client, content, 32, 0);
+    rc = zmq_send (client_, content, 32, 0);
     assert ((rc == 32) || ((rc == -1) && (errno == EAGAIN)));
 
     //  Receive message at server side (should not succeed)
-    rc = zmq_setsockopt (server, ZMQ_RCVTIMEO, &timeout, sizeof (int));
+    rc = zmq_setsockopt (server_, ZMQ_RCVTIMEO, &timeout, sizeof (int));
     assert (rc == 0);
-    rc = zmq_recv (server, buffer, 32, 0);
+    rc = zmq_recv (server_, buffer, 32, 0);
     assert (rc == -1);
     assert (zmq_errno () == EAGAIN);
 
     //  Send message from server to client to test other direction
     //  If connection failed, send may block, without a timeout
-    rc = zmq_setsockopt (server, ZMQ_SNDTIMEO, &timeout, sizeof (int));
+    rc = zmq_setsockopt (server_, ZMQ_SNDTIMEO, &timeout, sizeof (int));
     assert (rc == 0);
-    rc = zmq_send (server, content, 32, ZMQ_SNDMORE);
+    rc = zmq_send (server_, content, 32, ZMQ_SNDMORE);
     assert (rc == 32 || (rc == -1 && zmq_errno () == EAGAIN));
-    rc = zmq_send (server, content, 32, 0);
+    rc = zmq_send (server_, content, 32, 0);
     assert (rc == 32 || (rc == -1 && zmq_errno () == EAGAIN));
 
     //  Receive message at client side (should not succeed)
-    rc = zmq_setsockopt (client, ZMQ_RCVTIMEO, &timeout, sizeof (int));
+    rc = zmq_setsockopt (client_, ZMQ_RCVTIMEO, &timeout, sizeof (int));
     assert (rc == 0);
-    rc = zmq_recv (client, buffer, 32, 0);
+    rc = zmq_recv (client_, buffer, 32, 0);
     assert (rc == -1);
     assert (zmq_errno () == EAGAIN);
 }
@@ -187,10 +221,10 @@ void expect_bounce_fail (void *server, void *client)
 //  Receive 0MQ string from socket and convert into C string
 //  Caller must free returned string. Returns NULL if the context
 //  is being terminated.
-char *s_recv (void *socket)
+char *s_recv (void *socket_)
 {
     char buffer[256];
-    int size = zmq_recv (socket, buffer, 255, 0);
+    int size = zmq_recv (socket_, buffer, 255, 0);
     if (size == -1)
         return NULL;
     if (size > 255)
@@ -200,16 +234,16 @@ char *s_recv (void *socket)
 }
 
 //  Convert C string to 0MQ string and send to socket
-int s_send (void *socket, const char *string)
+int s_send (void *socket_, const char *string_)
 {
-    int size = zmq_send (socket, string, strlen (string), 0);
+    int size = zmq_send (socket_, string_, strlen (string_), 0);
     return size;
 }
 
 //  Sends string as 0MQ string, as multipart non-terminal
-int s_sendmore (void *socket, const char *string)
+int s_sendmore (void *socket_, const char *string_)
 {
-    int size = zmq_send (socket, string, strlen (string), ZMQ_SNDMORE);
+    int size = zmq_send (socket_, string_, strlen (string_), ZMQ_SNDMORE);
     return size;
 }
 
@@ -222,10 +256,10 @@ const char *SEQ_END = (const char *) 1;
 //  The list must be terminated by SEQ_END.
 //  Example: s_send_seq (req, "ABC", 0, "DEF", SEQ_END);
 
-void s_send_seq (void *socket, ...)
+void s_send_seq (void *socket_, ...)
 {
     va_list ap;
-    va_start (ap, socket);
+    va_start (ap, socket_);
     const char *data = va_arg (ap, const char *);
     while (true) {
         const char *prev = data;
@@ -233,11 +267,11 @@ void s_send_seq (void *socket, ...)
         bool end = data == SEQ_END;
 
         if (!prev) {
-            int rc = zmq_send (socket, 0, 0, end ? 0 : ZMQ_SNDMORE);
+            int rc = zmq_send (socket_, 0, 0, end ? 0 : ZMQ_SNDMORE);
             assert (rc != -1);
         } else {
-            int rc =
-              zmq_send (socket, prev, strlen (prev) + 1, end ? 0 : ZMQ_SNDMORE);
+            int rc = zmq_send (socket_, prev, strlen (prev) + 1,
+                               end ? 0 : ZMQ_SNDMORE);
             assert (rc != -1);
         }
         if (end)
@@ -251,7 +285,7 @@ void s_send_seq (void *socket, ...)
 //  The list must be terminated by SEQ_END.
 //  Example: s_recv_seq (rep, "ABC", 0, "DEF", SEQ_END);
 
-void s_recv_seq (void *socket, ...)
+void s_recv_seq (void *socket_, ...)
 {
     zmq_msg_t msg;
     zmq_msg_init (&msg);
@@ -260,11 +294,11 @@ void s_recv_seq (void *socket, ...)
     size_t more_size = sizeof (more);
 
     va_list ap;
-    va_start (ap, socket);
+    va_start (ap, socket_);
     const char *data = va_arg (ap, const char *);
 
     while (true) {
-        int rc = zmq_msg_recv (&msg, socket, 0);
+        int rc = zmq_msg_recv (&msg, socket_, 0);
         assert (rc != -1);
 
         if (!data)
@@ -275,7 +309,7 @@ void s_recv_seq (void *socket, ...)
         data = va_arg (ap, const char *);
         bool end = data == SEQ_END;
 
-        rc = zmq_getsockopt (socket, ZMQ_RCVMORE, &more, &more_size);
+        rc = zmq_getsockopt (socket_, ZMQ_RCVMORE, &more, &more_size);
         assert (rc == 0);
 
         assert (!more == end);
@@ -289,12 +323,12 @@ void s_recv_seq (void *socket, ...)
 
 
 //  Sets a zero linger period on a socket and closes it.
-void close_zero_linger (void *socket)
+void close_zero_linger (void *socket_)
 {
     int linger = 0;
-    int rc = zmq_setsockopt (socket, ZMQ_LINGER, &linger, sizeof (linger));
+    int rc = zmq_setsockopt (socket_, ZMQ_LINGER, &linger, sizeof (linger));
     assert (rc == 0 || errno == ETERM);
-    rc = zmq_close (socket);
+    rc = zmq_close (socket_);
     assert (rc == 0);
 }
 
@@ -328,12 +362,12 @@ void setup_test_environment (void)
 //  http://www.cplusplus.com/forum/unices/60161/
 //  http://en.cppreference.com/w/cpp/thread/sleep_for
 
-void msleep (int milliseconds)
+void msleep (int milliseconds_)
 {
 #ifdef ZMQ_HAVE_WINDOWS
-    Sleep (milliseconds);
+    Sleep (milliseconds_);
 #else
-    usleep (static_cast<useconds_t> (milliseconds) * 1000);
+    usleep (static_cast<useconds_t> (milliseconds_) * 1000);
 #endif
 }
 
@@ -351,11 +385,11 @@ int is_ipv6_available (void)
     test_addr.sin6_family = AF_INET6;
     inet_pton (AF_INET6, "::1", &(test_addr.sin6_addr));
 
-#ifdef ZMQ_HAVE_WINDOWS
-    SOCKET fd = socket (AF_INET6, SOCK_STREAM, IPPROTO_IP);
-    if (fd == INVALID_SOCKET)
+    fd_t fd = socket (AF_INET6, SOCK_STREAM, IPPROTO_IP);
+    if (fd == retired_fd)
         ipv6 = 0;
     else {
+#ifdef ZMQ_HAVE_WINDOWS
         setsockopt (fd, SOL_SOCKET, SO_REUSEADDR, (const char *) &ipv6,
                     sizeof (int));
         rc = setsockopt (fd, IPPROTO_IPV6, IPV6_V6ONLY, (const char *) &ipv6,
@@ -367,13 +401,7 @@ int is_ipv6_available (void)
             if (rc == SOCKET_ERROR)
                 ipv6 = 0;
         }
-        closesocket (fd);
-    }
 #else
-    int fd = socket (AF_INET6, SOCK_STREAM, IPPROTO_IP);
-    if (fd == -1)
-        ipv6 = 0;
-    else {
         setsockopt (fd, SOL_SOCKET, SO_REUSEADDR, &ipv6, sizeof (int));
         rc = setsockopt (fd, IPPROTO_IPV6, IPV6_V6ONLY, &ipv6, sizeof (int));
         if (rc != 0)
@@ -383,9 +411,9 @@ int is_ipv6_available (void)
             if (rc != 0)
                 ipv6 = 0;
         }
+#endif
         close (fd);
     }
-#endif
 
     return ipv6;
 #endif // _WIN32_WINNT < 0x0600
@@ -441,14 +469,5 @@ int test_inet_pton (int af_, const char *src_, void *dst_)
     return inet_pton (af_, src_, dst_);
 #endif
 }
-
-#if defined(ZMQ_HAVE_WINDOWS)
-
-int close (int fd)
-{
-    return closesocket (fd);
-}
-
-#endif
 
 #endif

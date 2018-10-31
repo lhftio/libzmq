@@ -32,10 +32,15 @@
 
 //  poller.hpp decides which polling mechanism to use.
 #include "poller.hpp"
-#if defined ZMQ_USE_EPOLL
+#if defined ZMQ_IOTHREAD_POLLER_USE_EPOLL
 
 #include <vector>
+
+#if defined ZMQ_HAVE_WINDOWS
+#include "../external/wepoll/wepoll.h"
+#else
 #include <sys/epoll.h>
+#endif
 
 #include "ctx.hpp"
 #include "fd.hpp"
@@ -70,11 +75,22 @@ class epoll_t : public worker_poller_base_t
     static int max_fds ();
 
   private:
+#if defined ZMQ_HAVE_WINDOWS
+    typedef HANDLE epoll_fd_t;
+    static const epoll_fd_t epoll_retired_fd;
+#else
+    typedef fd_t epoll_fd_t;
+    enum
+    {
+        epoll_retired_fd = retired_fd
+    };
+#endif
+
     //  Main event loop.
     void loop ();
 
     //  Main epoll file descriptor
-    fd_t epoll_fd;
+    epoll_fd_t _epoll_fd;
 
     struct poll_entry_t
     {
@@ -85,13 +101,10 @@ class epoll_t : public worker_poller_base_t
 
     //  List of retired event sources.
     typedef std::vector<poll_entry_t *> retired_t;
-    retired_t retired;
+    retired_t _retired;
 
     //  Handle of the physical thread doing the I/O work.
-    thread_t worker;
-
-    //  Synchronisation of retired event sources
-    mutex_t retired_sync;
+    thread_t _worker;
 
     epoll_t (const epoll_t &);
     const epoll_t &operator= (const epoll_t &);

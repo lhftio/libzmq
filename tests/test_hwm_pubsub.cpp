@@ -28,157 +28,189 @@
 */
 
 #include "testutil.hpp"
+#include "testutil_unity.hpp"
 
-// const int MAX_SENDS = 10000;
+// NOTE: on OSX the endpoint returned by ZMQ_LAST_ENDPOINT may be quite long,
+//       ensure we have extra space for that:
+#define SOCKET_STRING_LEN (MAX_SOCKET_STRING * 4)
 
-int test_defaults (int send_hwm, int msgCnt)
+void setUp ()
 {
-    void *ctx = zmq_ctx_new ();
-    assert (ctx);
-    int rc;
+    setup_test_context ();
+}
 
-    // Set up bind socket
-    void *pub_socket = zmq_socket (ctx, ZMQ_PUB);
-    assert (pub_socket);
-    rc = zmq_bind (pub_socket, "inproc://a");
-    assert (rc == 0);
+void tearDown ()
+{
+    teardown_test_context ();
+}
 
-    // Set up connect socket
-    void *sub_socket = zmq_socket (ctx, ZMQ_SUB);
-    assert (sub_socket);
-    rc = zmq_connect (sub_socket, "inproc://a");
-    assert (rc == 0);
+int test_defaults (int send_hwm_, int msg_cnt_, const char *endpoint)
+{
+    size_t len = SOCKET_STRING_LEN;
+    char pub_endpoint[SOCKET_STRING_LEN];
+
+    // Set up and bind XPUB socket
+    void *pub_socket = test_context_socket (ZMQ_XPUB);
+    TEST_ASSERT_SUCCESS_ERRNO (zmq_bind (pub_socket, endpoint));
+    TEST_ASSERT_SUCCESS_ERRNO (
+      zmq_getsockopt (pub_socket, ZMQ_LAST_ENDPOINT, pub_endpoint, &len));
+
+    // Set up and connect SUB socket
+    void *sub_socket = test_context_socket (ZMQ_SUB);
+    TEST_ASSERT_SUCCESS_ERRNO (zmq_connect (sub_socket, pub_endpoint));
 
     //set a hwm on publisher
-    rc = zmq_setsockopt (pub_socket, ZMQ_SNDHWM, &send_hwm, sizeof (send_hwm));
-    rc = zmq_setsockopt (sub_socket, ZMQ_SUBSCRIBE, 0, 0);
+    TEST_ASSERT_SUCCESS_ERRNO (
+      zmq_setsockopt (pub_socket, ZMQ_SNDHWM, &send_hwm_, sizeof (send_hwm_)));
+    TEST_ASSERT_SUCCESS_ERRNO (
+      zmq_setsockopt (sub_socket, ZMQ_SUBSCRIBE, 0, 0));
 
-    // Send until we block
+    // Wait before starting TX operations till 1 subscriber has subscribed
+    // (in this test there's 1 subscriber only)
+    const char subscription_to_all_topics[] = {1, 0};
+    recv_string_expect_success (pub_socket, subscription_to_all_topics, 0);
+
+    // Send until we reach "mute" state
     int send_count = 0;
-    while (send_count < msgCnt
-           && zmq_send (pub_socket, NULL, 0, ZMQ_DONTWAIT) == 0)
+    while (send_count < msg_cnt_
+           && zmq_send (pub_socket, "test message", 13, ZMQ_DONTWAIT) == 13)
         ++send_count;
 
+    TEST_ASSERT_EQUAL_INT (send_hwm_, send_count);
     msleep (SETTLE_TIME);
 
     // Now receive all sent messages
     int recv_count = 0;
-    while (0 == zmq_recv (sub_socket, NULL, 0, ZMQ_DONTWAIT)) {
+    char dummybuff[64];
+    while (13 == zmq_recv (sub_socket, &dummybuff, 64, ZMQ_DONTWAIT)) {
         ++recv_count;
     }
 
-    assert (send_hwm == recv_count);
+    TEST_ASSERT_EQUAL_INT (send_hwm_, recv_count);
 
     // Clean up
-    rc = zmq_close (sub_socket);
-    assert (rc == 0);
-
-    rc = zmq_close (pub_socket);
-    assert (rc == 0);
-
-    rc = zmq_ctx_term (ctx);
-    assert (rc == 0);
+    test_context_socket_close (sub_socket);
+    test_context_socket_close (pub_socket);
 
     return recv_count;
 }
 
-int receive (void *socket)
+int receive (void *socket_, int *is_termination)
 {
     int recv_count = 0;
+    *is_termination = 0;
+
     // Now receive all sent messages
-    while (0 == zmq_recv (socket, NULL, 0, ZMQ_DONTWAIT)) {
+    char buffer[255];
+    int len;
+    while ((len = zmq_recv (socket_, buffer, sizeof (buffer), 0)) >= 0) {
         ++recv_count;
+
+        if (len == 3 && strncmp (buffer, "end", len) == 0) {
+            *is_termination = 1;
+            return recv_count;
+        }
     }
 
     return recv_count;
 }
 
-
-int test_blocking (int send_hwm, int msgCnt)
+int test_blocking (int send_hwm_, int msg_cnt_, const char *endpoint)
 {
-    void *ctx = zmq_ctx_new ();
-    assert (ctx);
-    int rc;
+    size_t len = SOCKET_STRING_LEN;
+    char pub_endpoint[SOCKET_STRING_LEN];
 
     // Set up bind socket
-    void *pub_socket = zmq_socket (ctx, ZMQ_PUB);
-    assert (pub_socket);
-    rc = zmq_bind (pub_socket, "inproc://a");
-    assert (rc == 0);
+    void *pub_socket = test_context_socket (ZMQ_XPUB);
+    TEST_ASSERT_SUCCESS_ERRNO (zmq_bind (pub_socket, endpoint));
+    TEST_ASSERT_SUCCESS_ERRNO (
+      zmq_getsockopt (pub_socket, ZMQ_LAST_ENDPOINT, pub_endpoint, &len));
 
     // Set up connect socket
-    void *sub_socket = zmq_socket (ctx, ZMQ_SUB);
-    assert (sub_socket);
-    rc = zmq_connect (sub_socket, "inproc://a");
-    assert (rc == 0);
+    void *sub_socket = test_context_socket (ZMQ_SUB);
+    TEST_ASSERT_SUCCESS_ERRNO (zmq_connect (sub_socket, pub_endpoint));
 
     //set a hwm on publisher
-    rc = zmq_setsockopt (pub_socket, ZMQ_SNDHWM, &send_hwm, sizeof (send_hwm));
+    TEST_ASSERT_SUCCESS_ERRNO (
+      zmq_setsockopt (pub_socket, ZMQ_SNDHWM, &send_hwm_, sizeof (send_hwm_)));
     int wait = 1;
-    rc = zmq_setsockopt (pub_socket, ZMQ_XPUB_NODROP, &wait, sizeof (wait));
-    rc = zmq_setsockopt (sub_socket, ZMQ_SUBSCRIBE, 0, 0);
+    TEST_ASSERT_SUCCESS_ERRNO (
+      zmq_setsockopt (pub_socket, ZMQ_XPUB_NODROP, &wait, sizeof (wait)));
+    int timeout_ms = 10;
+    TEST_ASSERT_SUCCESS_ERRNO (zmq_setsockopt (
+      sub_socket, ZMQ_RCVTIMEO, &timeout_ms, sizeof (timeout_ms)));
+    TEST_ASSERT_SUCCESS_ERRNO (
+      zmq_setsockopt (sub_socket, ZMQ_SUBSCRIBE, 0, 0));
+
+    // Wait before starting TX operations till 1 subscriber has subscribed
+    // (in this test there's 1 subscriber only)
+    const char subscription_to_all_topics[] = {1, 0};
+    recv_string_expect_success (pub_socket, subscription_to_all_topics, 0);
 
     // Send until we block
     int send_count = 0;
     int recv_count = 0;
-    while (send_count < msgCnt) {
-        rc = zmq_send (pub_socket, NULL, 0, ZMQ_DONTWAIT);
+    int blocked_count = 0;
+    int is_termination = 0;
+    while (send_count < msg_cnt_) {
+        const int rc = zmq_send (pub_socket, NULL, 0, ZMQ_DONTWAIT);
         if (rc == 0) {
             ++send_count;
         } else if (-1 == rc) {
-            assert (EAGAIN == errno);
-            recv_count += receive (sub_socket);
-            assert (recv_count == send_count);
+            // if the PUB socket blocks due to HWM, errno should be EAGAIN:
+            blocked_count++;
+            TEST_ASSERT_EQUAL_INT (EAGAIN, errno);
+            recv_count += receive (sub_socket, &is_termination);
         }
     }
 
-    recv_count += receive (sub_socket);
+    // if send_hwm_ < msg_cnt_, we should block at least once:
+    TEST_ASSERT (blocked_count > 0);
+
+    // dequeue SUB socket again, to make sure XPUB has space to send the termination message
+    recv_count += receive (sub_socket, &is_termination);
+
+    // send termination message
+    send_string_expect_success (pub_socket, "end", 0);
+
+    // now block on the SUB side till we get the termination message
+    while (is_termination == 0)
+        recv_count += receive (sub_socket, &is_termination);
+
+    // remove termination message from the count:
+    recv_count--;
+
+    TEST_ASSERT_EQUAL_INT (send_count, recv_count);
 
     // Clean up
-    rc = zmq_close (sub_socket);
-    assert (rc == 0);
-
-    rc = zmq_close (pub_socket);
-    assert (rc == 0);
-
-    rc = zmq_ctx_term (ctx);
-    assert (rc == 0);
+    test_context_socket_close (sub_socket);
+    test_context_socket_close (pub_socket);
 
     return recv_count;
 }
 
+// hwm should apply to the messages that have already been received
 // with hwm 11024: send 9999 msg, receive 9999, send 1100, receive 1100
 void test_reset_hwm ()
 {
-    int first_count = 9999;
-    int second_count = 1100;
+    const int first_count = 9999;
+    const int second_count = 1100;
     int hwm = 11024;
-    size_t len = MAX_SOCKET_STRING;
-    char my_endpoint[MAX_SOCKET_STRING];
-
-    void *ctx = zmq_ctx_new ();
-    assert (ctx);
-    int rc;
+    char my_endpoint[SOCKET_STRING_LEN];
 
     // Set up bind socket
-    void *pub_socket = zmq_socket (ctx, ZMQ_PUB);
-    assert (pub_socket);
-    rc = zmq_setsockopt (pub_socket, ZMQ_SNDHWM, &hwm, sizeof (hwm));
-    assert (rc == 0);
-    rc = zmq_bind (pub_socket, "tcp://127.0.0.1:*");
-    assert (rc == 0);
-    rc = zmq_getsockopt (pub_socket, ZMQ_LAST_ENDPOINT, my_endpoint, &len);
-    assert (rc == 0);
+    void *pub_socket = test_context_socket (ZMQ_PUB);
+    TEST_ASSERT_SUCCESS_ERRNO (
+      zmq_setsockopt (pub_socket, ZMQ_SNDHWM, &hwm, sizeof (hwm)));
+    bind_loopback_ipv4 (pub_socket, my_endpoint, MAX_SOCKET_STRING);
 
     // Set up connect socket
-    void *sub_socket = zmq_socket (ctx, ZMQ_SUB);
-    assert (sub_socket);
-    rc = zmq_setsockopt (sub_socket, ZMQ_RCVHWM, &hwm, sizeof (hwm));
-    assert (rc == 0);
-    rc = zmq_connect (sub_socket, my_endpoint);
-    assert (rc == 0);
-    rc = zmq_setsockopt (sub_socket, ZMQ_SUBSCRIBE, 0, 0);
-    assert (rc == 0);
+    void *sub_socket = test_context_socket (ZMQ_SUB);
+    TEST_ASSERT_SUCCESS_ERRNO (
+      zmq_setsockopt (sub_socket, ZMQ_RCVHWM, &hwm, sizeof (hwm)));
+    TEST_ASSERT_SUCCESS_ERRNO (zmq_connect (sub_socket, my_endpoint));
+    TEST_ASSERT_SUCCESS_ERRNO (
+      zmq_setsockopt (sub_socket, ZMQ_SUBSCRIBE, 0, 0));
 
     msleep (SETTLE_TIME);
 
@@ -187,7 +219,7 @@ void test_reset_hwm ()
     while (send_count < first_count
            && zmq_send (pub_socket, NULL, 0, ZMQ_DONTWAIT) == 0)
         ++send_count;
-    assert (first_count == send_count);
+    TEST_ASSERT_EQUAL_INT (first_count, send_count);
 
     msleep (SETTLE_TIME);
 
@@ -196,7 +228,7 @@ void test_reset_hwm ()
     while (0 == zmq_recv (sub_socket, NULL, 0, ZMQ_DONTWAIT)) {
         ++recv_count;
     }
-    assert (first_count == recv_count);
+    TEST_ASSERT_EQUAL_INT (first_count, recv_count);
 
     msleep (SETTLE_TIME);
 
@@ -205,7 +237,7 @@ void test_reset_hwm ()
     while (send_count < second_count
            && zmq_send (pub_socket, NULL, 0, ZMQ_DONTWAIT) == 0)
         ++send_count;
-    assert (second_count == send_count);
+    TEST_ASSERT_EQUAL_INT (second_count, send_count);
 
     msleep (SETTLE_TIME);
 
@@ -214,35 +246,58 @@ void test_reset_hwm ()
     while (0 == zmq_recv (sub_socket, NULL, 0, ZMQ_DONTWAIT)) {
         ++recv_count;
     }
-    assert (second_count == recv_count);
+    TEST_ASSERT_EQUAL_INT (second_count, recv_count);
 
     // Clean up
-    rc = zmq_close (sub_socket);
-    assert (rc == 0);
-
-    rc = zmq_close (pub_socket);
-    assert (rc == 0);
-
-    rc = zmq_ctx_term (ctx);
-    assert (rc == 0);
+    test_context_socket_close (sub_socket);
+    test_context_socket_close (pub_socket);
 }
 
-int main (void)
+void test_tcp ()
+{
+    // send 1000 msg on hwm 1000, receive 1000, on TCP transport
+    TEST_ASSERT_EQUAL_INT (1000,
+                           test_defaults (1000, 1000, "tcp://127.0.0.1:*"));
+
+    // send 100 msg on hwm 100, receive 100
+    TEST_ASSERT_EQUAL_INT (100, test_defaults (100, 100, "tcp://127.0.0.1:*"));
+
+    // send 6000 msg on hwm 2000, drops above hwm, only receive hwm:
+    TEST_ASSERT_EQUAL_INT (6000,
+                           test_blocking (2000, 6000, "tcp://127.0.0.1:*"));
+}
+
+void test_inproc ()
+{
+    TEST_ASSERT_EQUAL_INT (1000, test_defaults (1000, 1000, "inproc://a"));
+    TEST_ASSERT_EQUAL_INT (100, test_defaults (100, 100, "inproc://b"));
+    TEST_ASSERT_EQUAL_INT (6000, test_blocking (2000, 6000, "inproc://c"));
+}
+
+#ifndef ZMQ_HAVE_WINDOWS
+
+void test_ipc ()
+{
+    TEST_ASSERT_EQUAL_INT (1000, test_defaults (1000, 1000, "ipc://*"));
+    TEST_ASSERT_EQUAL_INT (100, test_defaults (100, 100, "ipc://*"));
+    TEST_ASSERT_EQUAL_INT (6000, test_blocking (2000, 6000, "ipc://*"));
+}
+
+#endif
+
+int main ()
 {
     setup_test_environment ();
 
-    int count;
+    UNITY_BEGIN ();
 
-    // send 1000 msg on hwm 1000, receive 1000
-    count = test_defaults (1000, 1000);
-    assert (count == 1000);
+    // repeat the test for both TCP, INPROC and IPC transports:
 
-    // send 6000 msg on hwm 2000, drops above hwm, only receive hwm
-    count = test_blocking (2000, 6000);
-    assert (count == 6000);
-
-    // hwm should apply to the messages that have already been received
-    test_reset_hwm ();
-
-    return 0;
+    RUN_TEST (test_tcp);
+    RUN_TEST (test_inproc);
+#ifndef ZMQ_HAVE_WINDOWS
+    RUN_TEST (test_ipc);
+#endif
+    RUN_TEST (test_reset_hwm);
+    return UNITY_END ();
 }

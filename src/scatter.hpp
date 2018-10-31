@@ -49,7 +49,9 @@ class scatter_t : public socket_base_t
 
   protected:
     //  Overrides of functions from socket_base_t.
-    void xattach_pipe (zmq::pipe_t *pipe_, bool subscribe_to_all_);
+    void xattach_pipe (zmq::pipe_t *pipe_,
+                       bool subscribe_to_all_,
+                       bool locally_initiated_);
     int xsend (zmq::msg_t *msg_);
     bool xhas_out ();
     void xwrite_activated (zmq::pipe_t *pipe_);
@@ -57,7 +59,7 @@ class scatter_t : public socket_base_t
 
   private:
     //  Load balancer managing the outbound pipes.
-    lb_t lb;
+    lb_t _lb;
 
     scatter_t (const scatter_t &);
     const scatter_t &operator= (const scatter_t &);
