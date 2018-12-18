@@ -44,7 +44,6 @@
 #define HAVE_ACCEPT4
 
 #define ZMQ_HAVE_OPENPGM
-/* #undef ZMQ_HAVE_OPENPGM */
 /* #undef ZMQ_MAKE_VALGRIND_HAPPY */
 
 /* #undef ZMQ_HAVE_CURVE */
