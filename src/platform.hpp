@@ -43,7 +43,7 @@
 /* #undef ZMQ_HAVE_PTHREAD_SET_NAME */
 #define HAVE_ACCEPT4
 
-/* #undef ZMQ_HAVE_OPENPGM */
+#define ZMQ_HAVE_OPENPGM
 /* #undef ZMQ_MAKE_VALGRIND_HAPPY */
 
 /* #undef ZMQ_HAVE_CURVE */

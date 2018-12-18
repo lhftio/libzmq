@@ -1,4 +1,4 @@
-#!/bin/sh -eu
+#!/bin/bash -eu
 
 : ${BAZEL_BIN:=bazel}
 : ${BAZEL_SCRIPT:=./bazel}
@@ -7,6 +7,12 @@
 : ${BAZEL_GIT:="git -C $BAZEL_WORKSPACE"}
 : ${BAZEL_SUBMODULES_RAW:=$($BAZEL_GIT submodule)}
 : ${BAZEL_SUBMODULES=$(echo "$BAZEL_SUBMODULES_RAW" | awk '{ print $2 }')}
+
+: ${BAZEL_PYTHON_VERSION=$(cat tools/bazel.rc | grep -E -v '^#' | sed -e 's|^build --python_top=@python//:||;t;d')}
+
+if [ ! "$BAZEL_PYTHON_VERSION" = "" ]; then
+    export BAZEL_PIP_PYTHON=/opt/lt/rel/x86_64-centos7-linux/python/$BAZEL_PYTHON_VERSION/bin/python3
+fi
 
 bazel_usage() {
     # The regex below relaces bazel with ./bazel, but only if it's the
@@ -141,6 +147,16 @@ bazel_submodule_fetch_single() {
     git -C $BAZEL_WORKSPACE/$1 remote update >/dev/null 2>&1
 }
 
+bazel_submodule_add() {
+    git submodule add git@github.com:lhftio/$1 submodule/$1
+}
+
+bazel_submodule_remove() {
+   git submodule deinit -f submodule/$1
+   git rm --cached -f submodule/$1
+   rm -rf .git/modules/submodule/$1 submodule/$1
+}
+
 bazel_submodule_fetch() {
     if [ $# -ne 1 ]; then
         fail "bazel_submodule_fetch: expected exactly one argument"
@@ -239,8 +255,13 @@ fi
 
 BAZEL_MODE=$1; shift
 case "$BAZEL_MODE" in
-    upgrade)
-        bazel_$BAZEL_MODE "$@"
+    upgrade|update)
+        bazel_upgrade "$@"
+        ;;
+    submodule)
+        action=$1 
+        shift
+        bazel_submodule_$action "$@"
         ;;
     help|status)
         bazel_$BAZEL_MODE "$@"

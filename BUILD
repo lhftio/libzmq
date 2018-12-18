@@ -19,4 +19,8 @@ cc_library(
     defines = [
         "ZMQ_BUILD_DRAFT_API",
     ],
+    deps = [
+               "@pgm//:pgm",
+            ],
+
 )
