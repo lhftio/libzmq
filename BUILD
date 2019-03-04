@@ -18,6 +18,7 @@ cc_library(
     ]),
     defines = [
         "ZMQ_BUILD_DRAFT_API",
+        "SO_REUSEPORT",
     ],
     deps = [
                "@pgm//:pgm",
